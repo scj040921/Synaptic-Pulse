@@ -1,0 +1,8 @@
+backend/target/
+backend/data/*.mv.db
+backend/data/*.trace.db
+DC/unpackage/
+DC/node_modules/
+.idea/
+.vscode/
+DC/project.private.config.json

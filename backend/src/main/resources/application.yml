@@ -1,0 +1,16 @@
+server:
+  port: ${PORT:8088}
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:h2:file:./data/synaptic;DB_CLOSE_ON_EXIT=FALSE}
+    username: ${DB_USER:sa}
+    password: ${DB_PASSWORD:}
+  sql:
+    init:
+      mode: always
+app:
+  cors-origins: ${CORS_ORIGINS:http://localhost:8080,http://localhost:8081,http://localhost:5173}
+  ai:
+    base-url: ${AI_BASE_URL:https://api.openai.com/v1}
+    model: ${AI_MODEL:}
+    api-key: ${AI_API_KEY:}
