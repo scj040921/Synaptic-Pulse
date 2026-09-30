@@ -1,13 +1,13 @@
 <template>
   <view class="page">
-    <scroll-view scroll-y class="scroll">
+    <scroll-view direction="vertical" class="scroll">
       <view class="frame">
         <text class="eyebrow">YOUR SPACE</text>
         <text class="page-title">我的画像</text>
         <text class="muted">展示真实的兴趣，比填写完美的人设更容易找到同频者。</text>
 
         <view class="surface profile-head">
-          <view class="avatar"><text>{{ (profile.displayName || '隙').slice(0, 1) }}</text></view>
+          <view class="avatar"><text class="avatar-letter">{{ (profile.displayName || '隙').slice(0, 1) }}</text></view>
           <view><text class="name">{{ profile.displayName || '同学' }}</text><text class="muted">{{ profile.campus || '广州大学' }} · 体验账号</text></view>
         </view>
 
@@ -21,14 +21,14 @@
           <input class="field" v-model="interestsText" placeholder="用逗号分隔，如 摄影, 篮球, 编程" />
           <text class="muted hint">最多 10 个标签，每个最多 30 字。标签会用于当前的共同兴趣推荐。</text>
           <text v-if="message" class="feedback">{{ message }}</text>
-          <view class="primary-btn save" @click="save"><text>{{ saving ? '保存中…' : '保存资料' }}</text></view>
+          <view class="primary-btn save" @click="save"><text class="primary-label">{{ saving ? '保存中…' : '保存资料' }}</text></view>
         </view>
 
         <view class="surface info">
           <text class="section-title">项目体验说明</text>
-          <text class="muted">当前版本没有校园身份核验和附近定位。请勿在公开动态中填写电话、宿舍地址等个人信息。</text>
+          <text class="muted info-copy">当前版本没有校园身份核验和附近定位。请勿在公开动态中填写电话、宿舍地址等个人信息。</text>
         </view>
-        <view class="logout" @click="logout"><text>退出登录</text></view>
+        <view class="logout" @click="logout"><text class="logout-label">退出登录</text></view>
       </view>
     </scroll-view>
     <CustomTabBar />
@@ -81,7 +81,7 @@ async function logout() {
 .scroll { flex: 1; }
 .profile-head { flex-direction: row; align-items: center; margin-top: 28px; }
 .avatar { width: 60px; height: 60px; border-radius: 19px; background-color: #d9f1e9; justify-content: center; align-items: center; margin-right: 15px; }
-.avatar text { color: #2d746d; font-size: 26px; font-weight: 700; }
+.avatar-letter { color: #2d746d; font-size: 26px; font-weight: 700; }
 .name { font-size: 20px; color: #1a2c44; font-weight: 700; margin-bottom: 4px; }
 .form { margin-top: 15px; }
 .label { color: #4c5e75; font-size: 12px; font-weight: 700; margin-top: 21px; }
@@ -89,7 +89,7 @@ async function logout() {
 .hint { margin-top: 9px; }
 .feedback { margin-top: 12px; color: #397b73; font-size: 12px; }
 .save { margin-top: 23px; }
-.info .muted { margin-top: 11px; }
+.info-copy { margin-top: 11px; }
 .logout { align-items: center; margin-top: 22px; }
-.logout text { color: #9a5d6a; font-size: 13px; }
+.logout-label { color: #9a5d6a; font-size: 13px; }
 </style>

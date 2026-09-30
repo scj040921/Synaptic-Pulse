@@ -6,3 +6,4 @@ DC/node_modules/
 .idea/
 .vscode/
 DC/project.private.config.json
+.playwright-cli/

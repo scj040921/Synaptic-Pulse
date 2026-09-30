@@ -6,7 +6,7 @@
         <text class="nav-label" :class="{ selected: active === item.path }">{{ item.label }}</text>
       </view>
       <view class="nav-item" @click="publish">
-        <view class="nav-add"><text>＋</text></view>
+        <view class="nav-add"><text class="nav-add-icon">＋</text></view>
         <text class="nav-label">发布</text>
       </view>
       <view class="nav-item" v-for="item in tabs.slice(2, 4)" :key="item.path" @click="go(item.path)">
@@ -49,5 +49,5 @@ function publish() { uni.navigateTo({ url: '/pages/publish/publish' }) }
 .nav-label { font-size: 10px; color: #9ba9c0; margin-top: 2px; }
 .selected { color: #a7f1df; font-weight: 700; }
 .nav-add { width: 30px; height: 30px; border-radius: 11px; background-color: #a7f1df; justify-content: center; align-items: center; }
-.nav-add text { font-size: 25px; line-height: 28px; color: #182137; }
+.nav-add-icon { font-size: 25px; line-height: 28px; color: #182137; }
 </style>

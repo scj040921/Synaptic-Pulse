@@ -1,6 +1,6 @@
 <template>
   <view class="page">
-    <scroll-view scroll-y class="scroll">
+    <scroll-view direction="vertical" class="scroll">
       <view class="frame narrow">
         <text class="back" @click="back">← 返回</text>
         <text class="eyebrow">SOCIAL PRACTICE</text>
@@ -10,17 +10,17 @@
         <view class="surface">
           <text class="section-title">练习场景</text>
           <view class="scenarios">
-            <view v-for="item in scenarios" :key="item" class="scenario" :class="{ chosen: scenario === item }" @click="scenario = item"><text>{{ item }}</text></view>
+            <view v-for="item in scenarios" :key="item" class="scenario" :class="{ chosen: scenario === item }" @click="scenario = item"><text class="scenario-label" :class="{ 'scenario-label-selected': scenario === item }">{{ item }}</text></view>
           </view>
         </view>
 
         <view class="surface">
           <text class="section-title">你会怎么说？</text>
           <textarea class="practice-input" v-model="message" maxlength="1000" placeholder="例如：你好，我也对摄影社感兴趣，平时会组织校园拍摄吗？" />
-          <view class="consent" @click="agreed = !agreed"><text>{{ agreed ? '☑' : '□' }} 我同意将本次练习内容发送给所配置的模型服务</text></view>
+          <view class="consent" @click="agreed = !agreed"><text class="consent-label">{{ agreed ? '☑' : '□' }} 我同意将本次练习内容发送给所配置的模型服务</text></view>
           <text class="muted privacy">不要输入真实姓名、学号、联系方式或具体位置。练习内容不会写入本项目数据库。</text>
           <text v-if="error" class="error">{{ error }}</text>
-          <view class="primary-btn submit" @click="ask"><text>{{ busy ? '思考中…' : '获取回应与建议' }}</text></view>
+          <view class="primary-btn submit" @click="ask"><text class="primary-label">{{ busy ? '思考中…' : '获取回应与建议' }}</text></view>
         </view>
         <view v-if="reply" class="surface answer"><text class="section-title">练习伙伴的回应</text><text class="reply">{{ reply }}</text></view>
       </view>
@@ -61,12 +61,12 @@ async function ask() {
 .back { color: #397b73; font-size: 13px; margin-bottom: 25px; }
 .scenarios { flex-direction: row; flex-wrap: wrap; margin-top: 13px; }
 .scenario { border-radius: 13px; background-color: #f2f5f8; padding: 11px 14px; margin-right: 8px; margin-top: 8px; }
-.scenario text { color: #6f7f91; font-size: 12px; }
+.scenario-label { color: #6f7f91; font-size: 12px; }
 .chosen { background-color: #d9f1e9; }
-.chosen text { color: #23756b; font-weight: 700; }
+.scenario-label-selected { color: #23756b; font-weight: 700; }
 .practice-input { width: 100%; height: 130px; margin-top: 17px; background-color: #f5f7fa; border-radius: 13px; padding: 14px; box-sizing: border-box; font-size: 14px; line-height: 22px; }
 .consent { margin-top: 19px; }
-.consent text { font-size: 12px; color: #334d63; }
+.consent-label { font-size: 12px; color: #334d63; }
 .privacy { margin-top: 8px; }
 .error { font-size: 12px; color: #bd4a59; margin-top: 12px; }
 .submit { margin-top: 20px; }

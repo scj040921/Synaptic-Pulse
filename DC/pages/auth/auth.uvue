@@ -1,27 +1,27 @@
 <template>
   <view class="page auth-page">
     <view class="auth-frame">
-      <view class="brand"><text>✦</text></view>
+      <view class="brand"><text class="brand-icon">✦</text></view>
       <text class="eyebrow">SYNAPTIC PULSE</text>
       <text class="hero-title">让相遇，从共鸣开始。</text>
       <text class="muted intro">发现同校的共同兴趣，轻松开启一段有内容的对话。</text>
 
       <view class="surface form">
         <view class="mode-row">
-          <text :class="{ picked: mode === 'login' }" @click="mode = 'login'">登录</text>
-          <text :class="{ picked: mode === 'register' }" @click="mode = 'register'">创建体验账号</text>
+          <text class="mode-option" :class="{ picked: mode === 'login' }" @click="mode = 'login'">登录</text>
+          <text class="mode-option" :class="{ picked: mode === 'register' }" @click="mode = 'register'">创建体验账号</text>
         </view>
         <input class="field" v-model="username" placeholder="用户名（字母、数字或下划线）" />
         <input class="field" v-model="password" password placeholder="密码，至少 8 位" />
         <input v-if="mode === 'register'" class="field" v-model="displayName" placeholder="昵称" />
         <text v-if="error" class="error">{{ error }}</text>
-        <view class="primary-btn submit" @click="submit"><text>{{ busy ? '请稍候…' : mode === 'login' ? '进入隙湃' : '创建账号并进入' }}</text></view>
+        <view class="primary-btn submit" @click="submit"><text class="primary-label">{{ busy ? '请稍候…' : mode === 'login' ? '进入隙湃' : '创建账号并进入' }}</text></view>
         <text class="footnote">当前为项目体验账号，尚未接入校园身份核验。</text>
       </view>
 
       <view class="server-block">
         <text class="muted">API 服务地址（手机真机请填电脑的局域网地址）</text>
-        <input class="field" v-model="server" placeholder="http://192.168.1.8:8088" />
+        <input class="field server-field" v-model="server" placeholder="http://192.168.1.8:8088" />
       </view>
     </view>
   </view>
@@ -64,16 +64,16 @@ async function submit() {
 .auth-page { justify-content: center; background-color: #eaf0f3; }
 .auth-frame { width: 100%; max-width: 460px; margin: 0 auto; padding: 52px 24px; box-sizing: border-box; }
 .brand { width: 55px; height: 55px; border-radius: 17px; background-color: #263c59; justify-content: center; align-items: center; margin-bottom: 24px; }
-.brand text { font-size: 30px; color: #a7f1df; }
+.brand-icon { font-size: 30px; color: #a7f1df; }
 .hero-title { font-size: 33px; line-height: 44px; color: #17243d; font-weight: 700; margin-top: 10px; }
 .intro { margin-top: 8px; }
 .form { margin-top: 32px; padding: 23px; }
 .mode-row { flex-direction: row; margin-bottom: 13px; }
-.mode-row text { margin-right: 22px; font-size: 14px; color: #8090a1; padding-bottom: 9px; }
-.mode-row .picked { color: #263c59; font-weight: 700; border-bottom: 2px solid #66bfaa; }
+.mode-option { margin-right: 22px; font-size: 14px; color: #8090a1; padding-bottom: 9px; }
+.picked { color: #263c59; font-weight: 700; border-bottom: 2px solid #66bfaa; }
 .submit { margin-top: 20px; }
 .error { font-size: 12px; color: #c54d62; margin-top: 11px; }
 .footnote { font-size: 11px; color: #93a0af; text-align: center; margin-top: 13px; }
 .server-block { margin-top: 24px; }
-.server-block .field { background-color: #ffffff; }
+.server-field { background-color: #ffffff; }
 </style>

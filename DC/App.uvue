@@ -9,7 +9,7 @@ export default {
 
 <style>
   page { background-color: #f4f6fb; }
-  .page { flex: 1; min-height: 100vh; background-color: #f4f6fb; }
+  .page { flex: 1; background-color: #f4f6fb; }
   .frame { width: 100%; max-width: 960px; margin-left: auto; margin-right: auto; padding: 24px 20px 110px; box-sizing: border-box; }
   .eyebrow { font-size: 11px; letter-spacing: 2px; color: #5c7b87; font-weight: 700; }
   .page-title { font-size: 32px; line-height: 40px; color: #19223b; font-weight: 700; margin-top: 6px; }
@@ -18,10 +18,10 @@ export default {
   .section-title { font-size: 18px; font-weight: 700; color: #19223b; }
   .pill { background-color: #eaf5f3; color: #29796f; border-radius: 20px; padding: 6px 11px; font-size: 12px; margin-right: 7px; margin-top: 7px; }
   .primary-btn { min-height: 44px; background-color: #263c59; color: #ffffff; border-radius: 13px; justify-content: center; align-items: center; padding: 0 18px; }
-  .primary-btn text { color: #ffffff; font-size: 14px; font-weight: 600; }
+  .primary-label { color: #ffffff; font-size: 14px; font-weight: 600; }
   .secondary-btn { min-height: 42px; border-radius: 13px; background-color: #eaf5f3; justify-content: center; align-items: center; padding: 0 16px; }
-  .secondary-btn text { color: #28776e; font-size: 13px; font-weight: 600; }
+  .secondary-label { color: #28776e; font-size: 13px; font-weight: 600; }
   .field { height: 46px; background-color: #f4f6fb; border-radius: 12px; padding: 0 14px; margin-top: 10px; font-size: 14px; color: #19223b; }
   .empty { padding: 42px 18px; align-items: center; }
-  .empty text { color: #718097; font-size: 13px; text-align: center; line-height: 21px; }
+  .empty-label { color: #718097; font-size: 13px; text-align: center; line-height: 21px; }
 </style>

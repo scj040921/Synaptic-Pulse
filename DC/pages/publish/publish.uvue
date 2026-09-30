@@ -1,7 +1,7 @@
 <template>
   <view class="page">
     <view class="frame">
-      <view class="back" @click="back"><text>← 返回社区</text></view>
+      <view class="back" @click="back"><text class="back-label">← 返回社区</text></view>
       <text class="eyebrow">SHARE A MOMENT</text>
       <text class="page-title">发布动态</text>
       <text class="muted">分享你正在研究、喜欢或想讨论的事。</text>
@@ -10,7 +10,7 @@
         <text class="counter">{{ content.length }}/2000</text>
       </view>
       <text v-if="error" class="error">{{ error }}</text>
-      <view class="primary-btn submit" @click="submit"><text>{{ busy ? '发布中…' : '发布到校园社区' }}</text></view>
+      <view class="primary-btn submit" @click="submit"><text class="primary-label">{{ busy ? '发布中…' : '发布到校园社区' }}</text></view>
     </view>
   </view>
 </template>
@@ -41,7 +41,7 @@ async function submit() {
 
 <style scoped>
 .back { margin-bottom: 27px; }
-.back text { font-size: 13px; color: #397e76; }
+.back-label { font-size: 13px; color: #397e76; }
 .editor { margin-top: 27px; }
 .input-area { width: 100%; min-height: 230px; font-size: 16px; line-height: 25px; color: #263650; }
 .counter { color: #98a4b3; font-size: 11px; text-align: right; }
