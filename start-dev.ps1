@@ -1,5 +1,6 @@
 param(
-    [string]$HBuilderX = $env:HBUILDERX_PATH
+    [string]$HBuilderX = $env:HBUILDERX_PATH,
+    [switch]$Android
 )
 
 $ErrorActionPreference = 'Stop'
@@ -8,7 +9,14 @@ $backendDirectory = Join-Path $projectRoot 'backend'
 $frontendDirectory = Join-Path $projectRoot 'DC'
 
 $java = Get-Command java -ErrorAction Stop
-$javaVersionText = (& $java.Source -version 2>&1 | Select-Object -First 1)
+$javaStartInfo = [Diagnostics.ProcessStartInfo]::new()
+$javaStartInfo.FileName = $java.Source
+$javaStartInfo.Arguments = '-version'
+$javaStartInfo.RedirectStandardError = $true
+$javaStartInfo.UseShellExecute = $false
+$javaProcess = [Diagnostics.Process]::Start($javaStartInfo)
+$javaVersionText = $javaProcess.StandardError.ReadToEnd()
+$javaProcess.WaitForExit()
 if ($javaVersionText -notmatch '"(?<version>\d+)') {
     throw "无法识别 Java 版本：$javaVersionText"
 }
@@ -44,5 +52,31 @@ if (-not $backendReady) {
     Write-Host 'Java 后端已在 http://localhost:8088 运行。'
 }
 
+if ($Android) {
+    $sdkRoot = $env:ANDROID_HOME
+    if (-not $sdkRoot) {
+        $sdkRoot = [Environment]::GetEnvironmentVariable('ANDROID_HOME', 'User')
+    }
+    if (-not $sdkRoot) {
+        throw '未设置 ANDROID_HOME。请按 README 中的 Android SDK 步骤配置 SDK。'
+    }
+    $adb = Join-Path $sdkRoot 'platform-tools\adb.exe'
+    $emulator = Join-Path $sdkRoot 'emulator\emulator.exe'
+    if (-not (Test-Path -LiteralPath $adb) -or -not (Test-Path -LiteralPath $emulator)) {
+        throw "在 $sdkRoot 下找不到 adb 或 Android Emulator。"
+    }
+    $emulatorOnline = (& $adb devices | Select-String '^emulator-\d+\s+device(?:\s|$)')
+    if (-not $emulatorOnline) {
+        Start-Process -FilePath $emulator -ArgumentList @('-avd', 'SynapticPulse_API35', '-no-audio')
+        Write-Host '已启动 Android 模拟器 SynapticPulse_API35。'
+    } else {
+        Write-Host 'Android 模拟器已连接到 adb。'
+    }
+}
+
 Start-Process -FilePath $HBuilderX -ArgumentList $frontendDirectory
-Write-Host '已在 HBuilderX 中打开 DC 前端工程。选择“运行到浏览器”启动 Windows Web 版。'
+if ($Android) {
+    Write-Host '已在 HBuilderX 中打开 DC 前端工程。选择“运行到 Android App 基座”启动 Android 版。'
+} else {
+    Write-Host '已在 HBuilderX 中打开 DC 前端工程。选择“运行到浏览器”启动 Windows Web 版。'
+}

@@ -17,10 +17,10 @@
 1. 安装 JDK 17 或更新版本。项目自带 Maven Wrapper，无需单独安装 Maven。
 2. 在项目根目录运行 `powershell -ExecutionPolicy Bypass -File .\start-dev.ps1`。脚本会启动尚未运行的后端，并在 HBuilderX 中打开 `DC` 前端工程。首次运行后端会下载 Maven 及依赖。
 3. 在 HBuilderX 中选择“运行到浏览器”，Windows 端使用 Chrome 或 Edge 打开 Web 版。后端默认端口为 8088，Web 开发服务器常用 8080，二者不会占用同一端口。健康检查为 `http://localhost:8088/api/health`。
-4. Android 模拟器运行同一 `DC` 工程时，API 默认地址为 `http://10.0.2.2:8088`。真机需在登录页填写电脑的局域网地址，例如 `http://192.168.1.8:8088`；手机与电脑需要能相互访问。正式部署应改为 HTTPS 域名。
+4. 启动 Android 环境可运行 `powershell -ExecutionPolicy Bypass -File .\start-dev.ps1 -Android`，脚本会打开 Pixel 6 API 35 模拟器。HBuilderX 中选择“运行到 Android App 基座”。模拟器访问电脑后端的默认地址为 `http://10.0.2.2:8088`。真机需在登录页填写电脑的局域网地址，例如 `http://192.168.1.8:8088`；手机与电脑需要能相互访问。正式部署应改为 HTTPS 域名。
 5. 在登录页创建两个体验账号，分别设置兴趣标签，即可检验推荐、动态与双向聊天。
 
-项目启用了 [uni-app x 蒸汽模式](https://doc.dcloud.net.cn/uni-app-x/app-vapor.html)，以便 Android 端运行现有 JavaScript 页面；Android 蒸汽模式需要 HBuilderX 5.21+。本机现已安装 HBuilderX 5.26；原 4.53 安装仍保留。Android SDK 当前只有 `android-34` 平台文件，尚未配置 Platform-Tools（含 `adb`）和模拟器。Android 真机/模拟器调试还需配置这些 Android SDK 组件；正式打包需要项目自己的 DCloud AppID 与签名。**Windows 支持方式目前是浏览器 Web 版，没有原生 Windows 安装包。**
+项目启用了 [uni-app x 蒸汽模式](https://doc.dcloud.net.cn/uni-app-x/app-vapor.html)，以便 Android 端运行现有 JavaScript 页面；Android 蒸汽模式需要 HBuilderX 5.21+。本机现已安装 HBuilderX 5.26；原 4.53 安装仍保留。Android SDK 已配置在 `%ANDROID_HOME%`，包含 Platform-Tools、Android 35、Build-Tools 36 和 Pixel 6 API 35 模拟器；Android 正式打包仍需要项目自己的 DCloud AppID 与签名。**Windows 支持方式目前是浏览器 Web 版，没有原生 Windows 安装包。**
 
 ### 配置
 
