@@ -1,0 +1,75 @@
+<template>
+  <view class="page" :class="{ 'liquid-theme': theme === 'glass' }">
+    <scroll-view direction="vertical" class="scroll"><view class="frame narrow">
+      <text class="back" @click="back">← 返回</text><text class="eyebrow">SOCIAL PRACTICE</text>
+      <text class="page-title">社交练习室</text><text class="muted">从熟悉的校园场景开始，练习表达与协作。</text>
+      <view class="surface">
+        <text class="section-title">难度与场景</text>
+        <view class="options"><view v-for="item in levels" :key="item" class="choice" :class="{ chosen: level === item }" @click="selectLevel(item)"><text>{{ item }}</text></view></view>
+        <view class="options"><view v-for="item in scenarios" :key="item" class="choice" :class="{ chosen: scenario === item }" @click="selectScenario(item)"><text>{{ item }}</text></view></view>
+        <text class="muted hint">{{ level === '新手' ? '练习具体表达和开放提问' : level === '进阶' ? '练习安排任务和协调分工' : '练习不同意见与共同决策' }}</text>
+        <text class="muted hint">已完成 {{ practiceCount }} 次练习 · {{ progressText }}</text>
+      </view>
+      <view class="surface">
+        <view class="options"><view class="choice" :class="{ chosen: mode === 'offline' }" @click="selectMode('offline')"><text>本地练习</text></view><view v-if="aiAvailable" class="choice" :class="{ chosen: mode === 'ai' }" @click="selectMode('ai')"><text>AI 伙伴</text></view></view>
+        <text class="muted hint">{{ mode === 'ai' ? 'AI 会接收当前场景和本次练习对话。' : '本地规则提供模拟回应与表达建议，未调用 AI。' }}</text>
+        <view v-for="(turn, index) in history" :key="index" class="practice-turn" :class="{ own: turn.role === 'user' }"><text class="turn-label">{{ turn.role === 'user' ? '我' : '练习伙伴' }}</text><text class="turn-copy">{{ turn.content }}</text></view>
+        <view v-if="tips.length" class="tips"><text class="tip-title">表达建议</text><text v-for="tip in tips" :key="tip" class="muted">{{ tip }}</text></view>
+        <textarea class="practice-input" v-model="message" maxlength="1000" placeholder="例如：你好，我想了解摄影社，平时会组织哪些活动？" />
+        <view v-if="mode === 'ai'" class="consent" @click="agreed = !agreed"><text class="consent-label">{{ agreed ? '☑' : '□' }} 同意发送本次练习对话给模型服务</text></view>
+        <text v-if="error" class="error">{{ error }}</text>
+        <view class="primary-btn submit" @click="ask"><text class="primary-label">{{ busy ? '正在回应…' : history.length ? '继续练习' : '开始练习' }}</text></view>
+        <view class="secondary-btn submit" @click="restart"><text class="secondary-label">开始新一轮</text></view>
+        <text class="muted hint">服务器只保存练习次数、场景和难度，不保存练习对话。</text>
+      </view>
+    </view></scroll-view>
+  </view>
+</template>
+<script setup>
+import { ref } from 'vue'
+import { onPageShow } from '@dcloudio/uni-app'
+import { api, ensureLogin, errorText } from '@/common/api.js'
+import { getTheme } from '@/common/settings.js'
+type Turn = { role: string, content: string }
+const theme = ref(getTheme())
+const levels = ['新手', '进阶', '专家']; const scenarios = ['社团招新', '课堂小组讨论', '校园活动组织', '初次认识同学']
+const level = ref('新手'); const scenario = ref(scenarios[0]); const mode = ref('offline')
+const message = ref(''); const agreed = ref(false); const busy = ref(false); const error = ref('')
+const history = ref<Turn[]>([]); const tips = ref<string[]>([])
+const aiAvailable = ref(false); const practiceCount = ref(0); const progressText = ref('')
+let practiceId = Date.now().toString() + '-' + Math.random().toString(36).slice(2)
+onPageShow(async () => {
+  theme.value = getTheme()
+  if (!ensureLogin()) return
+  try { const status = await api('/capabilities'); aiAvailable.value = status.ai; await loadProgress() } catch (e) { error.value = errorText(e) }
+})
+async function loadProgress() {
+  const stats = await api('/me/stats'); practiceCount.value = stats.practiceCount
+  progressText.value = stats.levels.map((item) => item.level + ' ' + item.count + ' 次').join(' · ') || '还未开始，先试试新手场景'
+}
+function restart() { if (busy.value) return; history.value = []; tips.value = []; message.value = ''; error.value = ''; practiceId = Date.now().toString() + '-' + Math.random().toString(36).slice(2) }
+function selectLevel(value) { if (!busy.value && level.value !== value) { restart(); level.value = value } }
+function selectScenario(value) { if (!busy.value && scenario.value !== value) { restart(); scenario.value = value } }
+function selectMode(value) { if (!busy.value && mode.value !== value) { restart(); mode.value = value; agreed.value = false } }
+function back() { uni.navigateBack({ fail: () => uni.switchTab({ url: '/pages/mine/mine' }) }) }
+async function ask() {
+  if (busy.value) return
+  const content = message.value.trim()
+  if (!content) { error.value = '先输入一句想练习的话'; return }
+  if (mode.value === 'ai' && !agreed.value) { error.value = '请先确认本次练习对话可以发送给模型服务'; return }
+  busy.value = true; error.value = ''
+  try {
+    const result = await api('/practice/respond', 'POST', { scenario: scenario.value, message: content, level: level.value, mode: mode.value, consent: agreed.value, practiceId, history: history.value.slice(-8).map((turn) => ({ role: turn.role, content: turn.content.slice(0, 2000) })) })
+    history.value.push({ role: 'user', content }, { role: 'assistant', content: result.reply })
+    tips.value = result.tips; message.value = ''; await loadProgress()
+  } catch (e) { error.value = errorText(e) } finally { busy.value = false }
+}
+</script>
+<style scoped>
+.scroll { flex: 1; }.narrow { max-width: 760px; }.back { color: #397b73; font-size: 13px; margin-bottom: 25px; }
+.options { flex-direction: row; flex-wrap: wrap; margin-top: 12px; }.choice { border-radius: 12px; background-color: #f0f4f8; padding: 10px 12px; margin-right: 8px; margin-bottom: 8px; color: #687b8f; font-size: 12px; }.chosen { background-color: #d9f1e9; color: #29786d; }.hint { margin-top: 12px; font-size: 11px; }
+.practice-input { width: 100%; height: 105px; background-color: #f3f5f9; border-radius: 12px; padding: 12px; box-sizing: border-box; margin-top: 18px; font-size: 14px; }
+.practice-turn { border-radius: 13px; background-color: #f0f4f8; padding: 12px; margin-top: 12px; }.own { background-color: #e1f2ec; }.turn-label { color: #48867c; font-size: 11px; font-weight: 700; }.turn-copy { color: #33465d; font-size: 14px; line-height: 23px; margin-top: 6px; }.tips { margin-top: 14px; }.tip-title { font-size: 13px; color: #3d7c73; font-weight: 700; margin-bottom: 5px; }
+.consent { margin-top: 14px; }.consent-label { font-size: 12px; color: #547e78; }.error { color: #bd4a59; font-size: 12px; margin-top: 12px; }.submit { margin-top: 15px; }
+</style>
+

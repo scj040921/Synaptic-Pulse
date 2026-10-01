@@ -38,7 +38,7 @@ public class AuthController {
                 var ps = connection.prepareStatement(
                         "INSERT INTO users(username, password_hash, display_name) VALUES (?, ?, ?)",
                         new String[] { "ID" });
-                ps.setString(1, input.username().toLowerCase());
+                ps.setString(1, input.username().toLowerCase(java.util.Locale.ROOT));
                 ps.setString(2, auth.hashPassword(input.password()));
                 ps.setString(3, input.displayName().trim());
                 return ps;

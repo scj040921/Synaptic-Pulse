@@ -1,0 +1,242 @@
+<template>
+  <view class="page" :class="{ 'liquid-theme': theme === 'glass' }">
+    <scroll-view direction="vertical" class="scroll">
+      <view class="frame">
+        <text class="eyebrow">YOUR SPACE</text>
+        <text class="page-title">我的画像</text>
+        <text class="muted">展示真实的兴趣，比填写完美的人设更容易找到同频者。</text>
+
+        <view class="surface profile-head">
+          <view class="avatar" @click="changeAvatar">
+            <image v-if="profile.avatarUrl" class="avatar-image" :src="mediaUrl(profile.avatarUrl)" mode="aspectFill" />
+            <text v-else class="avatar-letter">{{ (profile.displayName || '隙').slice(0, 1) }}</text>
+          </view>
+          <view><text class="name">{{ profile.displayName || '同学' }}</text><text class="muted">{{ profile.campus || '广州大学' }} · 点击头像更换</text></view>
+        </view>
+
+        <view class="surface">
+          <text class="section-title">我的社交成长</text>
+          <text class="growth-value">{{ growth.pulses || 0 }} 神经脉冲</text>
+          <text class="muted">{{ growth.postCount || 0 }} 条动态 · {{ growth.practiceCount || 0 }} 次练习 · {{ growth.deepConversations || 0 }} 场双向对话</text>
+          <view class="growth-tags"><text class="pill" v-for="name in (growth.achievements || [])" :key="name">{{ name }}</text></view>
+          <text class="muted hint">脉冲依据发帖、练习与至少 6 条消息的双向对话计算，用于记录成长。</text>
+          <view class="secondary-btn save" @click="openTraining"><text class="secondary-label">查看分级练习 →</text></view>
+        </view>
+
+        <view class="surface settings-link" @click="openSettings">
+          <view><text class="section-title">设置</text><text class="muted">外观、消息刷新与服务地址</text></view>
+          <text class="settings-arrow">›</text>
+        </view>
+
+        <view class="surface form">
+          <text class="section-title">编辑个人资料</text><text v-if="loadingProfile" class="muted hint">正在加载资料…</text>
+          <text class="label">昵称</text>
+          <input class="field" :disabled="saving || loadingProfile" @input="markDirty" v-model="displayName" maxlength="40" placeholder="你希望大家怎么称呼你" />
+          <text class="label">自我介绍</text>
+          <textarea class="textarea" :disabled="saving || loadingProfile" @input="markDirty" v-model="bio" maxlength="300" placeholder="说说最近喜欢的事情…" />
+          <text class="label">院系 / 学院（选填）</text>
+          <input class="field" :disabled="saving || loadingProfile" @input="markDirty" v-model="college" maxlength="80" placeholder="如计算机科学与网络工程学院" />
+          <text class="label">专业（选填）</text>
+          <input class="field" :disabled="saving || loadingProfile" @input="markDirty" v-model="major" maxlength="80" placeholder="如软件工程，也可以暂不填写" />
+
+          <view class="portrait-heading"><text class="section-title">兴趣地图</text><text class="muted">{{ selectedInterests.length }}/10</text></view>
+          <text class="muted hint">按分类选择，也可以添加自己的标签；共同兴趣用于当前推荐排序。</text>
+          <view class="choice-row">
+            <view v-for="tag in selectedInterests" :key="tag" class="choice-chip chip-selected" @click="toggleInterest(tag)"><text class="choice-label">{{ tag }} ×</text></view>
+          </view>
+          <view class="interest-categories">
+            <view v-for="group in interestGroups" :key="group.key" class="category-chip" :class="{ 'category-active': interestCategory === group.key }" @click="interestCategory = group.key"><text class="category-label">{{ group.title }}</text></view>
+          </view>
+          <view v-for="group in interestGroups" :key="group.key">
+            <view v-if="interestCategory === group.key" class="choice-row">
+              <view v-for="option in group.options" :key="option" class="choice-chip" :class="{ 'chip-selected': selectedInterests.includes(option) }" @click="toggleInterest(option)"><text class="choice-label">{{ option }}</text></view>
+            </view>
+          </view>
+          <view class="custom-row"><input class="field custom-field" :disabled="saving || loadingProfile" v-model="customInterest" maxlength="309" placeholder="自定义兴趣，可用逗号分隔" @confirm="addInterests" /><view class="secondary-btn custom-add" @click="addInterests"><text class="secondary-label">添加</text></view></view>
+          <text class="muted hint">最多 10 个兴趣，每个最多 30 字；点击已选标签可以移除。</text>
+
+          <view class="portrait-heading"><text class="section-title">校园与社交偏好</text><text class="muted">选填</text></view>
+          <text class="muted hint">由你自行描述，可随时取消选择。填写后会展示在个人资料与推荐卡片中。</text>
+          <view v-for="group in portraitGroups" :key="group.key" class="portrait-group">
+            <view class="group-heading" @click="expandedGroup = expandedGroup === group.key ? '' : group.key">
+              <view class="group-copy"><text class="label group-label">{{ group.title }}</text><text class="muted group-summary">{{ choiceSummary(group.key) }}</text></view><text class="group-arrow">{{ expandedGroup === group.key ? '−' : '＋' }}</text>
+            </view>
+            <view v-if="expandedGroup === group.key">
+              <text class="muted option-hint">{{ group.max === 1 ? '选 1 项，再次点击可取消' : '最多选 ' + group.max + ' 项，再次点击可取消' }}</text>
+              <view class="choice-row"><view v-for="option in group.options" :key="option" class="choice-chip" :class="{ 'chip-selected': optionSelected(group.key, option) }" @click="toggleChoice(group, option)"><text class="choice-label">{{ option }}</text></view></view>
+            </view>
+          </view>
+          <text v-if="portraitGroups.length === 0 && !loadingProfile" class="feedback" @click="loadProfile">加载画像选项 →</text>
+          <text class="muted hint">性格标签是自我描述；目前推荐仍按共同兴趣计算，不作心理测评。</text>
+          <text v-if="message" class="feedback">{{ message }}</text>
+          <view class="primary-btn save" @click="save"><text class="primary-label">{{ saving ? '保存中…' : '保存资料' }}</text></view>
+        </view>
+
+        <view class="surface info">
+          <text class="section-title">项目体验说明</text>
+          <text class="muted info-copy">当前版本尚未提供校园身份核验。地图标记、资料与公开动态由用户主动填写，请按自己的意愿分享。</text>
+        </view>
+        <view class="logout" @click="logout"><text class="logout-label">退出登录</text></view>
+      </view>
+    </scroll-view>
+    <CustomTabBar />
+  </view>
+</template>
+
+<script setup>
+import { ref } from 'vue'
+import { onPageShow } from '@dcloudio/uni-app'
+import CustomTabBar from '@/components/CustomTabBar.uvue'
+import { api, clearToken, ensureLogin, uploadImage, mediaUrl, errorText, accountKey } from '@/common/api.js'
+import { getTheme } from '@/common/settings.js'
+const profile = ref({ displayName: '', campus: '', avatarUrl: '' })
+const theme = ref(getTheme())
+const displayName = ref('')
+const bio = ref('')
+type ProfileGroup = { key: string, title: string, max: number, options: string[] }
+const selectedInterests = ref<string[]>([])
+const customInterest = ref(''); const college = ref(''); const major = ref('')
+const portraitChoices = ref<Record<string, string[]>>({})
+const portraitGroups = ref<ProfileGroup[]>([]); const interestGroups = ref<ProfileGroup[]>([])
+const interestCategory = ref('sports'); const expandedGroup = ref('grade')
+const loadingProfile = ref(false); const dirty = ref(false)
+let loadedAccount = ''; let profileVersion = 0
+function markDirty() { dirty.value = true }
+const message = ref('')
+const saving = ref(false)
+const avatarBusy = ref(false)
+const growth = ref({ pulses: 0, postCount: 0, practiceCount: 0, deepConversations: 0, achievements: [] })
+
+onPageShow(async () => {
+  theme.value = getTheme(); uni.hideTabBar()
+  if (!ensureLogin()) return
+  const account = accountKey()
+  if (loadedAccount !== account) { dirty.value = false; loadedAccount = account; message.value = '' }
+  // Keep unfinished edits when returning from settings, practice or the album.
+  if (dirty.value || saving.value) return
+  await loadProfile()
+})
+async function loadProfile() {
+  if (loadingProfile.value || saving.value) return
+  const version = ++profileVersion; const account = accountKey(); loadingProfile.value = true
+  try {
+    const [data, stats, catalog] = await Promise.all([api('/me'), api('/me/stats'), api('/profile/options')])
+    if (version !== profileVersion || account !== accountKey()) return
+    growth.value = stats; applyProfile(data)
+    portraitGroups.value = catalog.groups; interestGroups.value = catalog.interests
+    dirty.value = false
+  } catch (e) { message.value = errorText(e) }
+  finally { if (version === profileVersion) loadingProfile.value = false }
+}
+function applyProfile(data) {
+  profile.value = data; displayName.value = data.displayName; bio.value = data.bio || ''
+  selectedInterests.value = data.interests.slice(); college.value = data.portrait?.college || ''; major.value = data.portrait?.major || ''
+  portraitChoices.value = { ...(data.portrait?.choices || {}) }
+}
+function toggleInterest(tag) {
+  if (saving.value || loadingProfile.value) return
+  if (selectedInterests.value.includes(tag)) selectedInterests.value = selectedInterests.value.filter(value => value !== tag)
+  else { if (selectedInterests.value.length >= 10) { message.value = '最多选择 10 个兴趣，请先移除一个'; return }; selectedInterests.value.push(tag) }
+  dirty.value = true; message.value = ''
+}
+function addInterests() {
+  if (saving.value || loadingProfile.value) return
+  const additions = customInterest.value.split(/[,，]/).map(value => value.trim()).filter(Boolean)
+  if (!additions.length) return
+  if (additions.some(value => value.length > 30)) { message.value = '每个兴趣最多 30 字'; return }
+  const values = selectedInterests.value.slice()
+  additions.forEach(value => { if (!values.includes(value)) values.push(value) })
+  if (values.length > 10) { message.value = '最多设置 10 个兴趣，请减少本次添加数量'; return }
+  selectedInterests.value = values; customInterest.value = ''; dirty.value = true; message.value = ''
+}
+function optionSelected(key, option) { return (portraitChoices.value[key] || []).includes(option) }
+function choiceSummary(key) { return (portraitChoices.value[key] || []).join(' · ') || '暂不填写' }
+function toggleChoice(group, option) {
+  if (saving.value || loadingProfile.value) return
+  const current = portraitChoices.value[group.key] || []
+  let values = current.filter(value => value !== option)
+  if (!current.includes(option)) {
+    if (group.max === 1) values = [option]
+    else { if (current.length >= group.max) { message.value = group.title + '最多选择 ' + group.max + ' 项'; return }; values = current.concat([option]) }
+  }
+  portraitChoices.value = { ...portraitChoices.value, [group.key]: values }; dirty.value = true; message.value = ''
+}
+
+function changeAvatar() {
+  if (avatarBusy.value || saving.value || loadingProfile.value) return
+  avatarBusy.value = true
+  uni.chooseImage({ count: 1, sourceType: ['album'], success: async (result) => {
+    if (!result.tempFilePaths.length) { avatarBusy.value = false; return }
+    try {
+      message.value = '正在上传头像…'
+      const uploaded = await uploadImage(result.tempFilePaths[0])
+      profile.value = await api('/me/avatar', 'PUT', { imageUrl: uploaded.url })
+      message.value = '头像已更新'
+    } catch (e) { message.value = errorText(e) }
+    finally { avatarBusy.value = false }
+  }, fail: () => { avatarBusy.value = false } })
+}
+function openSettings() { uni.navigateTo({ url: '/pages/settings/settings' }) }
+function openTraining() { uni.navigateTo({ url: '/pages/training/training' }) }
+
+async function save() {
+  if (saving.value || loadingProfile.value) return
+  if (customInterest.value.trim()) { message.value = '请先添加或清空自定义兴趣输入'; return }
+  if (!displayName.value.trim()) { message.value = '请填写昵称'; return }
+  saving.value = true
+  message.value = ''
+  try {
+    const data = await api('/me', 'PUT', { displayName: displayName.value.trim(), bio: bio.value, interests: selectedInterests.value, portrait: { college: college.value, major: major.value, choices: portraitChoices.value } })
+    applyProfile(data); dirty.value = false
+    message.value = '资料已保存'
+  } catch (e) { message.value = errorText(e) }
+  finally { saving.value = false }
+}
+async function logout() {
+  try { await api('/auth/logout', 'POST') } catch (_) {}
+  clearToken()
+  uni.reLaunch({ url: '/pages/auth/auth' })
+}
+</script>
+
+<style scoped>
+.portrait-heading { flex-direction: row; justify-content: space-between; align-items: center; margin-top: 27px; }
+.choice-row { flex-direction: row; flex-wrap: wrap; margin-top: 7px; }
+.choice-chip { padding: 8px 12px; border-radius: 12px; background-color: #f1f4f8; margin-right: 7px; margin-bottom: 7px; border-width: 1px; border-color: #e7ecf1; border-style: solid; }
+.choice-label { font-size: 12px; color: #52647b; }
+.chip-selected { background-color: #dff0ea; border-color: #8fc1b3; }
+.interest-categories { flex-direction: row; flex-wrap: wrap; margin-top: 13px; }
+.category-chip { padding: 7px 10px; margin-right: 7px; margin-bottom: 7px; border-radius: 10px; background-color: #edf1f6; }
+.category-active { background-color: #d5e9e3; }
+.category-label { font-size: 11px; color: #397b73; }
+.custom-row { flex-direction: row; align-items: center; margin-top: 4px; }
+.custom-field { flex: 1; margin-top: 0; margin-right: 8px; }
+.custom-add { padding: 0 15px; }
+.portrait-group { border-top-width: 1px; border-top-color: #edf0f4; border-top-style: solid; padding-top: 13px; margin-top: 13px; }
+.group-heading { flex-direction: row; justify-content: space-between; align-items: center; }
+.group-copy { flex: 1; }
+.group-label { margin-top: 0; }
+.group-summary { margin-top: 5px; font-size: 12px; }
+.group-arrow { color: #51857f; font-size: 21px; margin-left: 15px; }
+.option-hint { font-size: 11px; margin-top: 12px; }
+
+.scroll { flex: 1; }
+.growth-value { font-size: 27px; color: #397e76; font-weight: 700; margin: 16px 0 9px; }
+.growth-tags { flex-direction: row; flex-wrap: wrap; margin-top: 7px; }
+.profile-head { flex-direction: row; align-items: center; margin-top: 28px; }
+.avatar { width: 60px; height: 60px; border-radius: 19px; background-color: #d9f1e9; justify-content: center; align-items: center; margin-right: 15px; }
+.avatar-image { width: 100%; height: 100%; border-radius: 19px; }
+.avatar-letter { color: #2d746d; font-size: 26px; font-weight: 700; }
+.name { font-size: 20px; color: #1a2c44; font-weight: 700; margin-bottom: 4px; }
+.form { margin-top: 15px; }
+.label { color: #4c5e75; font-size: 12px; font-weight: 700; margin-top: 21px; }
+.textarea { width: 100%; height: 92px; background-color: #f4f6fb; border-radius: 12px; padding: 12px 14px; box-sizing: border-box; margin-top: 10px; font-size: 14px; color: #19223b; }
+.hint { margin-top: 9px; }
+.feedback { margin-top: 12px; color: #397b73; font-size: 12px; }
+.save { margin-top: 23px; }
+.info-copy { margin-top: 11px; }
+.settings-link { flex-direction: row; align-items: center; justify-content: space-between; }
+.settings-arrow { font-size: 27px; color: #8493a7; }
+.logout { align-items: center; margin-top: 22px; }
+.logout-label { color: #9a5d6a; font-size: 13px; }
+</style>

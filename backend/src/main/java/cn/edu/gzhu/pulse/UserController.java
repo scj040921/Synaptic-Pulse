@@ -17,10 +17,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class UserController {
     private final AuthService auth;
     private final UserService users;
+    private final ProfileService profiles;
 
-    public UserController(AuthService auth, UserService users) {
+    public UserController(AuthService auth, UserService users, ProfileService profiles) {
         this.auth = auth;
         this.users = users;
+        this.profiles = profiles;
     }
 
     @GetMapping("/users/{id}")
@@ -29,12 +31,21 @@ public class UserController {
         return users.get(id);
     }
 
+    @GetMapping("/profile/options")
+    public ProfileService.Catalog options(HttpServletRequest request) { auth.requireUser(request); return profiles.catalog(); }
+
     @PutMapping("/me")
     public UserService.UserView update(@Valid @RequestBody UpdateProfile input, HttpServletRequest request) {
-        return users.update(auth.requireUser(request), input.displayName(), input.bio(), input.interests());
+        return users.update(auth.requireUser(request), input.displayName(), input.bio(), input.interests(), input.portrait());
+    }
+
+    @PutMapping("/me/avatar")
+    public UserService.UserView avatar(@Valid @RequestBody UpdateAvatar input, HttpServletRequest request) {
+        return users.updateAvatar(auth.requireUser(request), input.imageUrl());
     }
 
     public record UpdateProfile(@NotBlank @Size(max = 40) String displayName,
                                 @Size(max = 300) String bio,
-                                List<String> interests) { }
+                                @Size(max = 10) List<String> interests, ProfileService.Portrait portrait) { }
+    public record UpdateAvatar(@NotBlank String imageUrl) { }
 }

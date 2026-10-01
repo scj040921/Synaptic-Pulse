@@ -1,0 +1,53 @@
+<template>
+  <view class="nav-wrap">
+    <view class="nav">
+      <view class="nav-item" v-for="item in tabs.slice(0, 2)" :key="item.path" @click="go(item.path)">
+        <text class="nav-icon" :class="{ selected: active === item.path }">{{ item.icon }}</text>
+        <text class="nav-label" :class="{ selected: active === item.path }">{{ item.label }}</text>
+      </view>
+      <view class="nav-item" @click="publish">
+        <view class="nav-add"><text class="nav-add-icon">＋</text></view>
+        <text class="nav-label">发布</text>
+      </view>
+      <view class="nav-item" v-for="item in tabs.slice(2, 4)" :key="item.path" @click="go(item.path)">
+        <text class="nav-icon" :class="{ selected: active === item.path }">{{ item.icon }}</text>
+        <text class="nav-label" :class="{ selected: active === item.path }">{{ item.label }}</text>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup>
+import { ref, onMounted } from 'vue'
+import { onPageShow } from '@dcloudio/uni-app'
+
+const tabs = [
+  { path: '/pages/index/index', icon: '✦', label: '共鸣' },
+  { path: '/pages/circle/circle', icon: '◎', label: '社区' },
+  { path: '/pages/chat/chat', icon: '◌', label: '消息' },
+  { path: '/pages/mine/mine', icon: '◇', label: '我的' }
+]
+const active = ref('/pages/index/index')
+
+function updateActive() {
+  const pages = getCurrentPages()
+  if (pages.length) active.value = '/' + pages[pages.length - 1].route
+  if (tabs.some((item) => item.path === active.value)) uni.hideTabBar({ fail: () => {} })
+}
+onMounted(updateActive)
+onPageShow(updateActive)
+
+function go(path) { uni.switchTab({ url: path }) }
+function publish() { uni.navigateTo({ url: '/pages/publish/publish' }) }
+</script>
+
+<style scoped>
+.nav-wrap { position: fixed; left: 0; right: 0; bottom: 0; align-items: center; z-index: 100; padding-bottom: env(safe-area-inset-bottom); }
+.nav { width: 94%; max-width: 640px; height: 64px; flex-direction: row; justify-content: space-around; align-items: center; background-color: #161b32; border-radius: 22px; margin-bottom: 12px; box-shadow: 0 14px 32px rgba(16, 20, 43, .26); }
+.nav-item { flex: 1; height: 54px; align-items: center; justify-content: center; }
+.nav-icon { font-size: 22px; color: #9ba9c0; line-height: 24px; }
+.nav-label { font-size: 10px; color: #9ba9c0; margin-top: 2px; }
+.selected { color: #a7f1df; font-weight: 700; }
+.nav-add { width: 30px; height: 30px; border-radius: 11px; background-color: #a7f1df; justify-content: center; align-items: center; }
+.nav-add-icon { font-size: 25px; line-height: 28px; color: #182137; }
+</style>

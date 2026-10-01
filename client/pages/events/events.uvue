@@ -1,0 +1,83 @@
+<template>
+  <view class="page" :class="{ 'liquid-theme': theme === 'glass' }">
+    <scroll-view direction="vertical" class="scroll"><view class="frame">
+      <text class="back" @click="back">← 返回</text>
+      <text class="eyebrow">CAMPUS TOGETHER</text><text class="page-title">校园活动</text><text class="muted">用一次共同参与，开启自然的认识。</text>
+      <view class="search-row"><input class="field search-field" v-model="query" maxlength="80" placeholder="搜索活动与兴趣关键词" @confirm="load" /><view class="secondary-btn" @click="load"><text class="secondary-label">搜索</text></view></view>
+      <view class="secondary-btn create-toggle" @click="creating = !creating"><text class="secondary-label">{{ creating ? '收起编辑' : '＋ 发起校园活动' }}</text></view>
+      <view v-if="creating" class="surface">
+        <text class="section-title">发起活动</text><input class="field" v-model="title" maxlength="80" placeholder="活动名称" />
+        <textarea class="event-input" v-model="content" maxlength="2000" placeholder="介绍活动安排、参与方式和注意事项" />
+        <input class="field" v-model="locationName" maxlength="80" placeholder="校园活动地点" @input="placeId = ''" />
+        <view class="secondary-btn create-toggle" @click="choosePlace"><text class="secondary-label">{{ choosing ? '正在打开地图…' : position ? '⌖ 已标记活动地点 · 更换' : '⌖ 在地图上标记活动地点' }}</text></view>
+        <text class="muted event-copy">支持点击任意位置、拖动微调，或选择预设校园地点。标记后活动会显示在地图上。</text>
+        <text v-if="position" class="muted event-copy">⌖ {{ position.latitude.toFixed(5) }}, {{ position.longitude.toFixed(5) }}</text><text v-if="position" class="map-link" @click="clearPosition">移除地图标记</text>
+        <input class="field" v-model="startsAt" placeholder="开始时间，如 2026-10-10 14:30" />
+        <input class="field" v-model="capacity" type="number" placeholder="名额，1～300" />
+        <view class="primary-btn create-toggle" @click="createEvent"><text class="primary-label">{{ saving ? '发布中…' : '发布活动' }}</text></view>
+      </view>
+      <text v-if="error" class="error">{{ error }}</text>
+      <view v-if="loading || events.length === 0" class="surface empty"><text class="empty-label">{{ loading ? '正在加载…' : '暂无活动，可以发起一场或换个关键词。' }}</text></view>
+      <view v-for="event in events" :key="event.id" class="surface">
+        <text class="section-title">{{ event.title }}</text><text class="muted event-copy">{{ event.hostName }} 发起 · {{ event.startsAt.replace('T', ' ').slice(0, 16) }}</text>
+        <text class="event-copy">{{ event.content }}</text><text class="muted event-copy">⌖ {{ event.locationName }} · {{ event.participants }}/{{ event.capacity }} 人</text>
+        <text v-if="event.placeId || event.latitude != null" class="map-link" @click="openMap(event)">在地图中查看 →</text>
+        <view class="event-actions"><view class="secondary-btn" @click="join(event)"><text class="secondary-label">{{ joining === event.id ? '处理中…' : event.joined ? '取消报名' : expired(event) ? '报名已截止' : event.participants >= event.capacity ? '名额已满' : '报名参与' }}</text></view><text v-if="event.hostId === ownId" class="delete-link" @click="remove(event)">删除活动</text></view>
+      </view>
+    </view></scroll-view>
+  </view>
+</template>
+<script setup>
+import { ref } from 'vue'
+import { onPageShow } from '@dcloudio/uni-app'
+import { api, ensureLogin, errorText, confirmAction } from '@/common/api.js'
+import { getTheme } from '@/common/settings.js'
+import { chooseActivityPosition } from '@/common/campus-map.js'
+type CampusEvent = { id: number, hostId: number, hostName: string, title: string, content: string, locationName: string, startsAt: string, capacity: number, participants: number, joined: boolean, placeId: string | null, latitude: number | null, longitude: number | null }
+const theme = ref(getTheme()); const events = ref<CampusEvent[]>([]); const query = ref(''); const ownId = ref(0)
+const loading = ref(false); const error = ref(''); const creating = ref(false); const saving = ref(false); const joining = ref(0)
+const title = ref(''); const content = ref(''); const locationName = ref(''); const startsAt = ref(''); const capacity = ref('20')
+const placeId = ref('')
+const position = ref<{latitude: number, longitude: number} | null>(null); const choosing = ref(false)
+async function choosePlace() {
+  if (choosing.value || saving.value) return
+  choosing.value = true
+  try { const point = await chooseActivityPosition(position.value ? { ...position.value, locationName: locationName.value } : null); if (point) { locationName.value = point.locationName; placeId.value = point.placeId || ''; position.value = { latitude: point.latitude, longitude: point.longitude }; error.value = '' } }
+  catch (e) { error.value = errorText(e) } finally { choosing.value = false }
+}
+function clearPosition() { if (!saving.value) { position.value = null; placeId.value = '' } }
+function openMap(event) { uni.navigateTo({ url: '/pages/map/map?event=' + event.id + '&place=' + encodeURIComponent(event.placeId || '') + (event.latitude != null ? '&lat=' + event.latitude + '&lng=' + event.longitude : '') }) }
+onPageShow(() => { theme.value = getTheme(); if (ensureLogin()) load() })
+function back() { uni.navigateBack({ fail: () => uni.switchTab({ url: '/pages/circle/circle' }) }) }
+function expired(event) { return new Date(event.startsAt.replace(/-/g, '/').replace('T', ' ')).getTime() <= Date.now() }
+async function load() {
+  if (loading.value) return
+  loading.value = true
+  try { const [items, me] = await Promise.all([api('/events?q=' + encodeURIComponent(query.value)), api('/me')]); events.value = items; ownId.value = me.id; error.value = '' }
+  catch (e) { error.value = errorText(e) } finally { loading.value = false }
+}
+async function createEvent() {
+  if (saving.value) return
+  if (!title.value.trim() || !content.value.trim() || !locationName.value.trim()) { error.value = '请填写活动名称、介绍和地点'; return }
+  if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(startsAt.value.trim())) { error.value = '时间格式为 年-月-日 时:分'; return }
+  const slots = Number(capacity.value)
+  if (!Number.isInteger(slots) || slots < 1 || slots > 300) { error.value = '名额需为 1 到 300 的整数'; return }
+  saving.value = true
+  try { await api('/events', 'POST', { title: title.value, content: content.value, locationName: locationName.value, startsAt: startsAt.value.trim().replace(' ', 'T') + ':00', capacity: slots, placeId: placeId.value || null, latitude: position.value?.latitude ?? null, longitude: position.value?.longitude ?? null }); creating.value = false; title.value = ''; content.value = ''; locationName.value = ''; placeId.value = ''; position.value = null; await load() }
+  catch (e) { error.value = errorText(e) } finally { saving.value = false }
+}
+async function join(event) {
+  if (joining.value || (!event.joined && (expired(event) || event.participants >= event.capacity))) return
+  joining.value = event.id
+  try { Object.assign(event, await api('/events/' + event.id + '/signup', event.joined ? 'DELETE' : 'PUT')); error.value = '' }
+  catch (e) { error.value = errorText(e); await load() } finally { joining.value = 0 }
+}
+async function remove(event) {
+  if (!await confirmAction('删除活动？', '删除后现有报名记录会一并移除。')) return
+  try { await api('/events/' + event.id, 'DELETE'); await load() } catch (e) { error.value = errorText(e) }
+}
+</script>
+<style scoped>
+.map-link { color: #397b73; font-size: 13px; margin-top: 12px; }
+.scroll { flex: 1; }.back { color: #397b73; font-size: 13px; margin-bottom: 25px; }.search-row { flex-direction: row; align-items: center; margin-top: 18px; }.search-field { flex: 1; margin-top: 0; margin-right: 9px; }.create-toggle { margin-top: 16px; }.event-input { width: 100%; height: 100px; margin-top: 12px; padding: 12px; background-color: #f4f6fb; border-radius: 12px; font-size: 14px; box-sizing: border-box; }.event-copy { color: #4e617a; font-size: 13px; line-height: 23px; margin-top: 12px; }.event-actions { flex-direction: row; align-items: center; justify-content: space-between; margin-top: 16px; }.delete-link { color: #ab6371; font-size: 12px; }.error { color: #bd4a59; font-size: 12px; margin-top: 12px; }
+</style>

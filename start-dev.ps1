@@ -5,8 +5,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $projectRoot = $PSScriptRoot
-$backendDirectory = Join-Path $projectRoot 'backend'
-$frontendDirectory = Join-Path $projectRoot 'DC'
+$serverDirectory = Join-Path $projectRoot 'backend'
+$clientDirectory = Join-Path $projectRoot 'client'
 
 $java = Get-Command java -ErrorAction Stop
 $javaStartInfo = [Diagnostics.ProcessStartInfo]::new()
@@ -44,10 +44,10 @@ if (-not $backendReady) {
     if (-not $terminal) {
         $terminal = (Get-Command powershell.exe -ErrorAction Stop).Source
     }
-    $backendCommand = "Set-Location -LiteralPath '$backendDirectory'; .\mvnw.cmd spring-boot:run"
+    $backendCommand = "Set-Location -LiteralPath '$serverDirectory'; .\mvnw.cmd spring-boot:run"
     $encodedCommand = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($backendCommand))
-    Start-Process -FilePath $terminal -ArgumentList @('-NoExit', '-EncodedCommand', $encodedCommand)
-    Write-Host '已在新终端启动 Java 后端，首次启动会下载 Maven 和依赖。'
+    Start-Process -FilePath $terminal -ArgumentList @('-NoExit', '-EncodedCommand', $encodedCommand) -WindowStyle Hidden
+    Write-Host '已在后台启动 Java 后端，首次启动会下载 Maven 和依赖。'
 } else {
     Write-Host 'Java 后端已在 http://localhost:8088 运行。'
 }
@@ -74,9 +74,9 @@ if ($Android) {
     }
 }
 
-Start-Process -FilePath $HBuilderX -ArgumentList $frontendDirectory
+Start-Process -FilePath $HBuilderX -ArgumentList $clientDirectory
 if ($Android) {
-    Write-Host '已在 HBuilderX 中打开 DC 前端工程。选择“运行到 Android App 基座”启动 Android 版。'
+    Write-Host '已在 HBuilderX 中打开 client 用户端工程。选择“运行到 Android App 基座”启动 Android 版。'
 } else {
-    Write-Host '已在 HBuilderX 中打开 DC 前端工程。选择“运行到浏览器”启动 Windows Web 版。'
+    Write-Host '已在 HBuilderX 中打开 client 用户端工程。选择“运行到浏览器”启动 Windows Web 版。'
 }

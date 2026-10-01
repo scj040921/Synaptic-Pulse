@@ -1,0 +1,6 @@
+# Third-party components and map data
+
+- **Leaflet 1.9.4**: https://github.com/Leaflet/Leaflet/tree/v1.9.4 — BSD 2-Clause. The original license is preserved in `vendor/Leaflet-LICENSE.txt`. Distribution files are pinned to 1.9.4, downloaded from the published npm package. No modified Leaflet source is included.
+- **DCloud WebView bridge 1.5.5**: the unmodified integration script published with the official hello-uni-app-x example: https://github.com/dcloudio/hello-uni-app-x/blob/alpha/hybrid/html/uni.webview.1.5.5.js . Integration documentation: https://doc.dcloud.net.cn/uni-app-x/component/web-view . This notice does not assign the script a license absent from its source.
+- **Campus coordinates and vector geometry**: © OpenStreetMap contributors, ODbL 1.0. https://www.openstreetmap.org/copyright . Extract acquired on 2026-10-02 via https://www.openstreetmap.org/api/0.6/map?bbox=113.363,23.032,113.377,23.044 . The derivative GeoJSON is distributed in `campus.geojson`; source links for POIs are preserved in `backend/src/main/resources/map/places.json`.
+- **Optional online street tiles**: https://tile.openstreetmap.org . Usage policy: https://operations.osmfoundation.org/policies/tiles/ . Visible attribution is retained. No tile scraping, bulk download or offline prefetch is implemented.

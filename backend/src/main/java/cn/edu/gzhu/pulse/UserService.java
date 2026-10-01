@@ -12,13 +12,14 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class UserService {
     private final JdbcTemplate db;
+    private final ProfileService profiles;
 
-    public UserService(JdbcTemplate db) { this.db = db; }
+    public UserService(JdbcTemplate db, ProfileService profiles) { this.db = db; this.profiles = profiles; }
 
     public UserView get(long id) {
-        List<UserView> users = db.query("SELECT id, display_name, bio, campus FROM users WHERE id = ?",
+        List<UserView> users = db.query("SELECT id, display_name, bio, campus, avatar_url, portrait_json FROM users WHERE id = ?",
                 (rs, row) -> new UserView(rs.getLong("id"), rs.getString("display_name"),
-                        rs.getString("bio"), rs.getString("campus"), interests(rs.getLong("id"))), id);
+                        rs.getString("bio"), rs.getString("campus"), rs.getString("avatar_url"), interests(rs.getLong("id")), profiles.read(rs.getString("portrait_json"))), id);
         if (users.isEmpty()) throw new ApiException(HttpStatus.NOT_FOUND, "用户不存在");
         return users.get(0);
     }
@@ -28,8 +29,16 @@ public class UserService {
                 (rs, row) -> rs.getString(1), id);
     }
 
+    public UserView updateAvatar(long id, String imageUrl) {
+        Integer owned = db.queryForObject("SELECT COUNT(*) FROM image_assets WHERE uploader_id = ? AND image_url = ?",
+                Integer.class, id, imageUrl);
+        if (owned == null || owned != 1) throw new ApiException(HttpStatus.BAD_REQUEST, "请选择自己上传的头像图片");
+        db.update("UPDATE users SET avatar_url = ? WHERE id = ?", imageUrl, id);
+        return get(id);
+    }
+
     @Transactional
-    public UserView update(long id, String displayName, String bio, List<String> interests) {
+    public UserView update(long id, String displayName, String bio, List<String> interests, ProfileService.Portrait portrait) {
         String name = displayName == null ? "" : displayName.trim();
         String about = bio == null ? "" : bio.trim();
         if (name.isEmpty() || name.length() > 40 || about.length() > 300) {
@@ -46,7 +55,10 @@ public class UserService {
             }
         }
         if (normalized.size() > 10) throw new ApiException(HttpStatus.BAD_REQUEST, "最多设置 10 个兴趣标签");
+        String portraitJson = portrait == null ? null : profiles.write(portrait);
         db.update("UPDATE users SET display_name = ?, bio = ? WHERE id = ?", name, about, id);
+        // An older client omitting portrait must preserve the newer profile fields.
+        if (portraitJson != null) db.update("UPDATE users SET portrait_json=? WHERE id=?", portraitJson, id);
         db.update("DELETE FROM user_interests WHERE user_id = ?", id);
         for (String interest : normalized) {
             db.update("INSERT INTO user_interests(user_id, interest) VALUES (?, ?)", id, interest);
@@ -65,5 +77,5 @@ public class UserService {
         return result;
     }
 
-    public record UserView(long id, String displayName, String bio, String campus, List<String> interests) { }
+    public record UserView(long id, String displayName, String bio, String campus, String avatarUrl, List<String> interests, ProfileService.Portrait portrait) { }
 }

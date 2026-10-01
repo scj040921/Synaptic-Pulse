@@ -23,19 +23,21 @@ public class MatchController {
     @GetMapping
     public List<Match> matches(HttpServletRequest request) {
         long ownId = auth.requireUser(request);
-        Set<String> ownInterests = new HashSet<>(users.interests(ownId));
+        Set<String> ownInterests = new HashSet<>(users.interests(ownId).stream().map(value -> value.toLowerCase(java.util.Locale.ROOT)).toList());
         return users.candidates(ownId).stream().map(candidate -> {
-            Set<String> common = new HashSet<>(candidate.interests());
+            Set<String> common = new HashSet<>(candidate.interests().stream().map(value -> value.toLowerCase(java.util.Locale.ROOT)).toList());
             common.retainAll(ownInterests);
-            Set<String> all = new HashSet<>(candidate.interests());
+            Set<String> all = new HashSet<>(candidate.interests().stream().map(value -> value.toLowerCase(java.util.Locale.ROOT)).toList());
             all.addAll(ownInterests);
             // 第一阶段基线：Jaccard(共同标签 / 标签并集)，方便解释与后续模型对照。
             int score = all.isEmpty() ? 0 : Math.round(common.size() * 100f / all.size());
-            return new Match(candidate, score, common.stream().sorted().toList());
+            List<String> shared = candidate.interests().stream().filter(value -> common.contains(value.toLowerCase(java.util.Locale.ROOT))).sorted().toList();
+            String reason = shared.isEmpty() ? "同校新朋友，可以从校园生活开始了解" : "你们都关注 " + String.join("、", shared);
+            return new Match(candidate, score, shared, reason);
         }).sorted(Comparator.comparingInt(Match::score).reversed()
                 .thenComparing(match -> match.user().id(), Comparator.reverseOrder()))
                 .limit(20).toList();
     }
 
-    public record Match(UserService.UserView user, int score, List<String> commonInterests) { }
+    public record Match(UserService.UserView user, int score, List<String> commonInterests, String reason) { }
 }

@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <title>校园地图 · Synaptic Pulse</title>
+  <link rel="stylesheet" href="vendor/leaflet.css"><link rel="stylesheet" href="map.css">
+</head>
+<body>
+  <header class="topbar surface">
+    <button id="back" class="icon-button" aria-label="返回上一页">←</button>
+    <div class="brand"><span class="eyebrow">SYNAPTIC PULSE · CAMPUS ATLAS</span><h1>校园地图<span>广州大学 · 大学城</span></h1></div>
+    <button id="pin" class="soft-button">＋ 标记发帖</button>
+    <button id="locate" class="soft-button">⌖ 我的定位</button>
+  </header>
+  <main class="workspace">
+    <section class="map-region" aria-label="可拖动和缩放的校园地图">
+      <div id="map"></div>
+      <div class="map-tools surface"><button id="reset">回到校园</button><button id="basemap">切换街道底图</button></div>
+      <button id="search-center" class="center-search surface">⌖ 以地图中心查找附近</button>
+      <div class="map-caption surface"><span class="legend-dot"></span><span id="center-label">校园参考中心 · 非实时定位</span><span class="divider">|</span><span id="radius-label">250 米</span></div>
+    </section>
+    <aside class="panel surface" aria-label="校园地点与活动">
+      <div class="panel-heading"><div><span class="eyebrow">FIND YOUR RESONANCE</span><h2 id="panel-title">探索校园</h2></div><span id="place-count" class="count">…</span></div>
+      <label class="search"><span aria-hidden="true">⌕</span><input id="search" type="search" maxlength="80" placeholder="搜索地点、动态、活动…" aria-label="搜索校园地点和活动"></label>
+      <nav class="tabs"><button data-tab="places" class="active">校园地点</button><button data-tab="posts">位置动态</button><button data-tab="events">活动波纹</button><button data-tab="favorites">我的收藏</button></nav>
+      <div class="range-row"><button id="nearby" aria-pressed="false">全部校园</button><label>范围 <select id="radius" aria-label="附近范围"><option value="250">250 米</option><option value="500">500 米</option><option value="1000">1 公里</option></select></label><button id="refresh" aria-label="刷新地图数据">↻</button></div>
+      <nav id="categories" class="categories" aria-label="地点分类"></nav>
+      <p id="status" role="status" aria-live="polite"></p>
+      <div id="detail" hidden></div>
+      <div id="list" class="results"></div>
+      <footer>附近距离为直线距离。地点与建筑来自 <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a>，入口及开放信息以现场为准。</footer>
+    </aside>
+  </main>
+  <script src="vendor/leaflet.js"></script><script src="vendor/uni.webview.1.5.5.js"></script><script src="map.js"></script>
+</body>
+</html>

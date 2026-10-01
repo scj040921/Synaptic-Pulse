@@ -23,13 +23,17 @@ public class AuthService {
 
     public AuthService(JdbcTemplate db) { this.db = db; }
 
-    public String hashPassword(String password) { return passwords.encode(password); }
+    public String hashPassword(String password) {
+        if (password.getBytes(StandardCharsets.UTF_8).length > 72) throw new ApiException(HttpStatus.BAD_REQUEST, "密码按 UTF-8 编码不能超过 72 字节");
+        return passwords.encode(password);
+    }
 
     public long checkCredentials(String username, String password) {
         List<Account> accounts = db.query(
                 "SELECT id, password_hash FROM users WHERE username = ?",
                 (rs, row) -> new Account(rs.getLong("id"), rs.getString("password_hash")),
-                username.toLowerCase());
+                username.trim().toLowerCase(java.util.Locale.ROOT));
+        if (password.getBytes(StandardCharsets.UTF_8).length > 72) throw new ApiException(HttpStatus.UNAUTHORIZED, "账号或密码错误");
         if (accounts.isEmpty() || !passwords.matches(password, accounts.get(0).hash())) {
             throw new ApiException(HttpStatus.UNAUTHORIZED, "账号或密码错误");
         }
@@ -37,6 +41,7 @@ public class AuthService {
     }
 
     public String createToken(long userId) {
+        db.update("DELETE FROM sessions WHERE expires_at <= CURRENT_TIMESTAMP");
         byte[] bytes = new byte[32];
         random.nextBytes(bytes);
         String token = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);

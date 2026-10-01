@@ -1,0 +1,266 @@
+<template>
+  <view class="page" :class="{ 'liquid-theme': theme === 'glass' }">
+    <scroll-view direction="vertical" class="scroll">
+    <view class="frame">
+      <view class="back" @click="back"><text class="back-label">← 返回</text></view>
+      <text class="eyebrow">SHARE A MOMENT</text>
+      <text class="page-title">发布动态</text>
+      <text class="muted">分享你正在研究、喜欢或想讨论的事。</text>
+      <view class="surface editor">
+        <textarea v-model="content" class="input-area" maxlength="2000" placeholder="今天想分享什么？" />
+        <text class="counter">{{ content.length }}/2000</text>
+        <view class="secondary-btn assist-btn" @click="assist"><text class="secondary-label">{{ assisting ? '正在生成…' : '文案与话题辅助' }}</text></view>
+      </view>
+      <view class="surface post-type-section">
+        <text class="section-title">动态类型</text>
+        <view class="type-options">
+          <view class="type-option" :class="{ 'type-active': !withImages }" @click="setMode(false)"><text>文字动态</text></view>
+          <view class="type-option" :class="{ 'type-active': withImages }" @click="setMode(true)"><text>图文动态</text></view>
+        </view>
+      </view>
+      <view v-if="withImages" class="surface photo-section" :class="{ 'drop-active': dragActive }"
+        @dragover.prevent="onDragOver" @dragleave.prevent="onDragLeave" @drop.prevent="onDrop">
+        <view class="photo-heading">
+          <text class="section-title">添加图片</text>
+          <text class="muted photo-count">{{ images.length }}/9</text>
+        </view>
+        <view class="photo-grid">
+          <view class="photo-tile" v-for="(image, index) in images" :key="image.path">
+            <image class="photo-preview" :src="image.path" mode="aspectFill" @click="previewSelected(index)" />
+            <view class="remove-photo" @click="removeImage(index)"><text class="remove-photo-label">×</text></view>
+          </view>
+          <view v-if="images.length < 9" class="photo-tile add-photo" @click="chooseImages">
+            <text class="add-photo-icon">＋</text><text class="add-photo-label">添加图片</text>
+          </view>
+        </view>
+        <text class="muted photo-hint">点击添加图片从本地选择；电脑端也可拖到这里。最多 9 张，支持 JPG、PNG、WebP、GIF，单张不超过 5 MB。</text>
+      </view>
+      <view class="surface">
+        <text class="section-title">话题与校园地点</text>
+        <input class="field" v-model="topicsText" maxlength="154" placeholder="话题，用逗号分隔，最多 5 个" />
+        <input class="field" v-model="locationName" maxlength="80" placeholder="地点（选填），如广州大学图书馆" />
+        <view class="action-row"><view class="secondary-btn" @click="pickPosition"><text class="secondary-label">{{ position ? "更换地图位置" : "在地图上标记位置" }}</text></view><text v-if="position" class="back-label" @click="removePosition">移除标记</text></view>
+        <text v-if="position" class="muted photo-hint">⌖ {{ position.latitude.toFixed(5) }}, {{ position.longitude.toFixed(5) }}</text>
+        <text class="muted photo-hint">{{ position ? "标记的位置将随帖子公开展示，不代表实时定位。" : "可填写地点名称，也可在地图上标记任意位置。" }}</text>
+      </view>
+      <view class="action-row">
+        <view class="secondary-btn" @click="saveDraft"><text class="secondary-label">保存草稿</text></view>
+        <view class="secondary-btn" @click="preview = !preview"><text class="secondary-label">{{ preview ? '收起预览' : '预览排版' }}</text></view>
+      </view>
+      <view v-if="preview" class="surface">
+        <text class="section-title">发布预览</text><text class="preview-copy">{{ content || '图片动态' }}</text>
+        <view v-if="withImages" class="photo-grid"><image v-for="image in images" :key="image.path" class="photo-tile" :src="image.path" mode="aspectFill" /></view>
+        <text class="muted">{{ topicsText ? '#' + topicsText.replace(/[,，]/g, ' #') : '' }} {{ locationName ? ' · ' + locationName : '' }}</text>
+      </view>
+      <text v-if="error" class="error">{{ error }}</text>
+      <text v-if="notice" class="notice">{{ notice }}</text>
+      <view class="primary-btn submit" @click="submit"><text class="primary-label">{{ busy ? progress : '发布到校园社区' }}</text></view>
+    </view>
+    </scroll-view>
+  </view>
+</template>
+
+<script setup>
+import { ref, getCurrentInstance } from 'vue'
+import { api, ensureLogin, uploadImage, uploadWebFile, mediaUrl, accountKey, errorText, confirmAction } from '@/common/api.js'
+import { getTheme } from '@/common/settings.js'
+import { chooseMapPosition } from '@/common/campus-map.js'
+import { onLoad, onPageShow } from '@dcloudio/uni-app'
+
+const content = ref('')
+const error = ref('')
+const busy = ref(false)
+const progress = ref('发布中…')
+type SelectedImage = { path: string, uploadedUrl: string }
+const images = ref<SelectedImage[]>([])
+const topicsText = ref('')
+const locationName = ref('')
+type MapPosition = { latitude: number, longitude: number }
+const position = ref<MapPosition | null>(null)
+const instance = getCurrentInstance()
+let initialPosition = null; let fromMap = false; let opener = null; let pickingPosition = false
+onLoad((options) => {
+  fromMap = options.fromMap === '1'
+  if (fromMap) opener = instance?.proxy?.getOpenerEventChannel()
+  const lat = Number(options.lat), lng = Number(options.lng)
+  if (options.lat && options.lng && Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) initialPosition = { latitude: lat, longitude: lng, locationName: options.name || '地图标记' }
+})
+const preview = ref(false)
+const assisting = ref(false)
+const notice = ref('')
+const withImages = ref(false)
+const dragActive = ref(false)
+const pendingDrops = ref(0)
+const theme = ref(getTheme())
+let restored = false
+function draftKey() { return 'pulse_draft:' + accountKey() }
+onPageShow(() => {
+  theme.value = getTheme()
+  if (!ensureLogin() || restored) return
+  restored = true
+  const draft = uni.getStorageSync(draftKey())
+  if (draft) {
+    content.value = draft.content || ''; topicsText.value = draft.topicsText || ''; locationName.value = draft.locationName || ''
+    images.value = (draft.imageUrls || []).map((url) => ({ path: mediaUrl(url), uploadedUrl: url }))
+    withImages.value = draft.withImages || false
+    position.value = draft.position || null
+    notice.value = '已恢复上次保存的草稿'
+  }
+  if (initialPosition) { position.value = { latitude: initialPosition.latitude, longitude: initialPosition.longitude }; locationName.value = initialPosition.locationName }
+})
+async function pickPosition() {
+  if (busy.value || pickingPosition) return
+  pickingPosition = true
+  try { const point = await chooseMapPosition(position.value); if (point) { position.value = { latitude: point.latitude, longitude: point.longitude }; locationName.value = point.locationName } }
+  catch (e) { error.value = errorText(e) }
+  finally { pickingPosition = false }
+}
+function removePosition() { if (!busy.value) position.value = null }
+function leave() { if (fromMap) uni.navigateBack({ fail: () => uni.switchTab({ url: '/pages/circle/circle' }) }); else uni.switchTab({ url: '/pages/circle/circle' }) }
+async function back() {
+  if (busy.value || assisting.value || pendingDrops.value) return
+  if ((content.value.trim() || images.value.length) && await confirmAction('保留这条动态？', '选择确定保存为草稿后返回，取消则直接返回。')) {
+    if (!await saveDraft()) return
+  }
+  leave()
+}
+function setMode(enabled) { if (!busy.value && !pendingDrops.value) withImages.value = enabled }
+function chooseImages() {
+  if (busy.value || pendingDrops.value) return
+  const remaining = 9 - images.value.length
+  if (remaining <= 0) return
+  uni.chooseImage({
+    count: remaining,
+    sizeType: ['original'],
+    sourceType: ['album'],
+    success: (result) => {
+      const selected = result.tempFilePaths.map((path) => ({ path, uploadedUrl: '' }))
+      images.value = images.value.concat(selected).slice(0, 9)
+      error.value = ''
+    },
+    fail: () => {}
+  })
+}
+function removeImage(index) { if (!busy.value && !pendingDrops.value) images.value.splice(index, 1) }
+function onDragOver() { dragActive.value = true }
+function onDragLeave() { dragActive.value = false }
+async function onDrop(event) {
+  dragActive.value = false
+  if (busy.value || pendingDrops.value || !withImages.value) return
+  // #ifdef H5
+  const files = Array.from(event.dataTransfer?.files || []) as File[]
+  if (!files.length) return
+  for (const file of files) {
+    if (images.value.length >= 9) { notice.value = '最多添加 9 张图片'; break }
+    if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type) || file.size > 5 * 1024 * 1024) {
+      error.value = '仅支持单张不超过 5 MB 的 JPG、PNG、WebP 或 GIF 图片'
+      continue
+    }
+    const previewUrl = URL.createObjectURL(file)
+    const item: SelectedImage = { path: previewUrl, uploadedUrl: '' }
+    images.value.push(item)
+    pendingDrops.value++
+    try {
+      const uploaded = await uploadWebFile(file)
+      const index = images.value.findIndex((image) => image.path === previewUrl)
+      if (index >= 0) images.value[index] = { path: mediaUrl(uploaded.url), uploadedUrl: uploaded.url }
+      URL.revokeObjectURL(previewUrl)
+      error.value = ''
+    } catch (e) {
+      const index = images.value.findIndex((image) => image.path === previewUrl)
+      if (index >= 0) images.value.splice(index, 1)
+      URL.revokeObjectURL(previewUrl)
+      error.value = errorText(e)
+    } finally { pendingDrops.value-- }
+  }
+  // #endif
+}
+async function uploadedImages() {
+  const urls: string[] = []
+  for (let i = 0; i < (withImages.value ? images.value.length : 0); i++) {
+    progress.value = '正在上传图片 ' + (i + 1) + '/' + images.value.length + '…'
+    if (!images.value[i].uploadedUrl) images.value[i].uploadedUrl = (await uploadImage(images.value[i].path)).url
+    urls.push(images.value[i].uploadedUrl)
+  }
+  return urls
+}
+async function saveDraft() {
+  if (busy.value || assisting.value || pendingDrops.value) return false
+  busy.value = true; error.value = ''
+  try {
+    const imageUrls = await uploadedImages()
+    uni.setStorageSync(draftKey(), { content: content.value, topicsText: topicsText.value, locationName: locationName.value, withImages: withImages.value, imageUrls, position: position.value })
+    notice.value = '草稿已保存在当前设备'; return true
+  } catch (e) { error.value = errorText(e); return false }
+  finally { busy.value = false; progress.value = '发布中…' }
+}
+async function assist() {
+  if (assisting.value || busy.value) return
+  if (!content.value.trim()) { error.value = '先写下你想分享的内容'; return }
+  assisting.value = true
+  try {
+    const status = await api('/capabilities')
+    if (status.ai && !await confirmAction('使用 AI 文案辅助？', '将把当前编辑的文字发送给已配置的模型服务，不包含头像、图片、位置和私聊记录。')) return
+    const result = await api('/posts/assist', 'POST', { prompt: content.value, mode: status.ai ? 'ai' : 'offline', consent: status.ai })
+    content.value = result.draft; if (!topicsText.value) topicsText.value = result.topics.join(', ')
+    notice.value = result.source === 'ai' ? '已生成 AI 建议，请核对后发布' : '已添加本地文案建议（未调用 AI）'
+  } catch (e) { error.value = errorText(e) }
+  finally { assisting.value = false }
+}
+function previewSelected(index) {
+  uni.previewImage({ urls: images.value.map((image) => image.path), current: index })
+}
+async function submit() {
+  if (busy.value || assisting.value) return
+  if (pendingDrops.value) { error.value = '请等待拖入的图片上传完成'; return }
+  if (withImages.value && images.value.length === 0) { error.value = '图文动态请至少添加一张图片'; return }
+  if (!content.value.trim() && !withImages.value) { error.value = '请填写动态内容'; return }
+  busy.value = true
+  error.value = ''
+  try {
+    const imageUrls = await uploadedImages()
+    const topics = topicsText.value.split(/[,，]/).map((topic) => topic.trim().replace(/#/g, '')).filter(Boolean)
+    progress.value = '正在发布…'
+    const post = await api('/posts', 'POST', { content: content.value.trim(), imageUrls, topics, locationName: locationName.value, latitude: position.value?.latitude ?? null, longitude: position.value?.longitude ?? null })
+    if (opener) opener.emit('postPublished', post)
+    uni.removeStorageSync(draftKey())
+    content.value = ''
+    images.value = []
+    withImages.value = false
+    leave()
+  } catch (e) { error.value = errorText(e) }
+  finally { busy.value = false; progress.value = '发布中…' }
+}
+</script>
+
+<style scoped>
+.scroll { flex: 1; }
+.assist-btn { align-self: flex-start; margin-top: 12px; }
+.action-row { flex-direction: row; justify-content: space-between; margin-top: 16px; }
+.preview-copy { color: #344359; font-size: 14px; line-height: 24px; margin-top: 12px; }
+.notice { color: #377c73; font-size: 12px; margin-top: 12px; }
+.back { margin-bottom: 27px; }
+.back-label { font-size: 13px; color: #397e76; }
+.editor { margin-top: 27px; }
+.post-type-section { margin-top: 14px; }
+.type-options { flex-direction: row; margin-top: 13px; }
+.type-option { padding: 11px 16px; border-radius: 12px; background-color: #f1f4f8; margin-right: 10px; color: #5e6e83; font-size: 13px; }
+.type-active { background-color: #dff0ea; color: #236d65; font-weight: 700; }
+.photo-section { margin-top: 14px; }
+.drop-active { border-width: 2px; border-style: dashed; border-color: #55a99c; }
+.photo-heading { flex-direction: row; justify-content: space-between; align-items: center; }
+.photo-count { font-size: 12px; }
+.photo-grid { flex-direction: row; flex-wrap: wrap; margin-top: 13px; }
+.photo-tile { width: 31%; height: 100px; margin-right: 2%; margin-bottom: 7px; border-radius: 11px; overflow: hidden; position: relative; background-color: #f1f4f7; }
+.photo-preview { width: 100%; height: 100%; }
+.remove-photo { position: absolute; right: 5px; top: 5px; width: 23px; height: 23px; border-radius: 12px; background-color: rgba(20, 30, 45, .72); justify-content: center; align-items: center; }
+.remove-photo-label { color: #ffffff; font-size: 18px; line-height: 20px; }
+.add-photo { justify-content: center; align-items: center; border-width: 1px; border-style: dashed; border-color: #bdc9d5; }
+.add-photo-icon { color: #64827f; font-size: 27px; line-height: 30px; }
+.add-photo-label { color: #758496; font-size: 11px; margin-top: 3px; }
+.photo-hint { font-size: 11px; margin-top: 4px; }
+.input-area { width: 100%; min-height: 230px; font-size: 16px; line-height: 25px; color: #263650; }
+.counter { color: #98a4b3; font-size: 11px; text-align: right; }
+.error { color: #bd4a59; font-size: 12px; margin-top: 12px; }
+.submit { margin-top: 18px; }
+</style>

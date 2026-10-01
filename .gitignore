@@ -1,9 +1,20 @@
 backend/target/
 backend/data/*.mv.db
 backend/data/*.trace.db
+backend/data/uploads/
+client/unpackage/
+client/node_modules/
+# HBuilderX may keep the previous project cache here while it is open.
 DC/unpackage/
-DC/node_modules/
 .idea/
 .vscode/
-DC/project.private.config.json
+client/project.private.config.json
 .playwright-cli/
+output/
+.env
+.env.*
+!.env.example
+*.jks
+*.keystore
+*.p12
+*.pfx

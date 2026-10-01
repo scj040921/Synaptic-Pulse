@@ -8,8 +8,13 @@ spring:
   sql:
     init:
       mode: always
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
 app:
-  cors-origins: ${CORS_ORIGINS:http://localhost:8080,http://localhost:8081,http://localhost:5173}
+  upload-dir: ${UPLOAD_DIR:./data/uploads}
+  cors-origins: ${CORS_ORIGINS:http://localhost:8080,http://localhost:8081,http://localhost:5173,http://localhost:5174}
   ai:
     base-url: ${AI_BASE_URL:https://api.openai.com/v1}
     model: ${AI_MODEL:}

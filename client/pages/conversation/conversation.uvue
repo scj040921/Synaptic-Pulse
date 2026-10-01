@@ -1,0 +1,140 @@
+<template>
+  <view class="page conversation" :class="{ 'liquid-theme': theme === 'glass' }">
+    <view class="thread-frame">
+      <view class="thread-header"><text class="back" @click="back">←</text>
+        <view class="peer-avatar"><image v-if="peer.avatarUrl" class="peer-avatar-image" :src="mediaUrl(peer.avatarUrl)" mode="aspectFill" /><text v-else>{{ (peer.displayName || '聊').slice(0, 1) }}</text></view>
+        <view class="peer-heading"><text class="peer-name">{{ peer.displayName || '对话' }}</text><text class="muted">校园对话 · 图片与表情包</text></view>
+        <text class="header-action" @click="refresh(true)">刷新</text><text class="header-action" @click="showSearch = !showSearch">搜索</text><text class="block" @click="blockPeer">屏蔽</text>
+      </view>
+      <view v-if="showSearch" class="search-row"><input class="message-input" v-model="search" maxlength="80" placeholder="搜索聊天中的文字" @confirm="searchMessages" /><text class="header-action" @click="searchMessages">查找</text><text class="header-action" @click="clearSearch">清除</text></view>
+      <scroll-view direction="vertical" class="messages" :scroll-into-view="lastAnchor">
+        <view class="history-link" @click="loadOlder"><text class="muted">{{ loadingOlder ? '正在加载…' : noOlder ? '已到最早消息' : '加载更早消息' }}</text></view>
+        <view v-if="visibleMessages.length === 0" class="empty"><text class="empty-label">{{ searching ? '没有匹配的文字消息' : '从共同兴趣开始，发出第一句问候吧。' }}</text></view>
+        <view v-if="!searching && messages.length === 0" class="starter" @click="draft = icebreaker"><text class="muted">开场建议：{{ icebreaker }}</text><text class="header-action">点这里填入输入框</text></view>
+        <view v-for="message in visibleMessages" :key="message.id" :id="'m' + message.id" class="message-row" :class="{ own: message.senderId === myId }">
+          <text class="message-time">{{ message.createdAt.replace('T', ' ').slice(5, 16) }}</text>
+          <view v-if="message.type === 'image'" class="image-bubble" @click="previewMessage(message)"><image class="message-image" :src="mediaUrl(message.imageUrl)" mode="aspectFit" /></view>
+          <view v-else-if="message.type === 'sticker'" class="sticker-bubble" @click="previewMessage(message)"><image v-if="message.imageUrl" class="sticker-image" :src="mediaUrl(message.imageUrl)" mode="aspectFit" /><text v-else class="sticker-emoji">{{ message.content }}</text></view>
+          <view v-else class="bubble" :class="{ ownBubble: message.senderId === myId }"><text class="bubble-copy">{{ message.content }}</text></view>
+        </view>
+      </scroll-view>
+      <view v-if="hasNew && !searching" class="new-hint" @click="scrollLatest"><text>查看新消息 ↓</text></view>
+      <view v-if="error" class="error-row"><text class="error-copy">{{ error }}</text><text v-if="pendingMedia" class="retry" @click="retryMedia">重试发送附件</text></view>
+      <view v-if="showStickers" class="sticker-picker"><view v-for="sticker in stickers" :key="sticker" class="sticker-choice" @click="sendSticker(sticker)"><text>{{ sticker }}</text></view><view class="sticker-upload" @click="chooseAttachment('sticker')"><text class="sticker-upload-label">＋ 从本地选择表情包 / GIF</text></view></view>
+      <view class="composer"><view class="tool-btn" @click="showStickers = !showStickers"><text class="tool-icon">☺</text></view><view class="tool-btn" @click="chooseAttachment('image')"><text class="tool-icon">▧</text></view><input class="message-input" v-model="draft" maxlength="1000" placeholder="发送一条友善的消息…" confirm-type="send" @confirm="send" /><view class="send-btn" @click="send"><text class="send-label">{{ sending ? '发送中' : '发送' }}</text></view></view>
+    </view>
+  </view>
+</template>
+<script setup>
+import { ref, computed } from 'vue'
+import { onLoad, onPageShow, onPageHide, onUnload } from '@dcloudio/uni-app'
+import { api, ensureLogin, uploadImage, mediaUrl, accountKey, errorText, confirmAction } from '@/common/api.js'
+import { getTheme, getChatAutoRefresh } from '@/common/settings.js'
+type Message = { id: number, senderId: number, receiverId: number, content: string, type: string, imageUrl: string, createdAt: string }
+type Outgoing = { type: string, content: string, imageUrl: string, clientId: string }
+const peerId = ref(0); const peer = ref({ displayName: '', avatarUrl: '' }); const myId = ref(0)
+const messages = ref<Message[]>([]); const draft = ref(''); const error = ref(''); const lastAnchor = ref('')
+const theme = ref(getTheme()); const sending = ref(false); const showStickers = ref(false)
+const icebreaker = ref('你好！最近有什么校园活动值得参加吗？')
+const stickers = ['😀', '🥹', '😍', '😎', '😭', '👍', '🎉', '❤️']
+const showSearch = ref(false); const search = ref(''); const searching = ref(false); const searchResults = ref<Message[]>([])
+const loadingOlder = ref(false); const noOlder = ref(false); const hasNew = ref(false)
+const pendingMedia = ref<Outgoing | null>(null)
+const visibleMessages = computed(() => searching.value ? searchResults.value : messages.value)
+let timer: number | null = null; let active = false; let refreshing = false; let version = 0; let restored = false
+let pendingText = { content: '', clientId: '' }
+let savedDraftKey = ''
+function newId() { return Date.now().toString() + '-' + Math.random().toString(36).slice(2) }
+function draftKey() { return savedDraftKey || ('pulse_chat_draft:' + accountKey() + ':' + peerId.value) }
+onLoad((options) => { peerId.value = Number(options.id) })
+onPageShow(async () => {
+  stop(); active = true; const current = ++version; theme.value = getTheme()
+  if (!ensureLogin() || !Number.isInteger(peerId.value) || peerId.value < 1) return
+  if (!restored) { savedDraftKey = draftKey(); draft.value = uni.getStorageSync(draftKey()) || ''; restored = true }
+  try {
+    const [mine, other] = await Promise.all([api('/me'), api('/users/' + peerId.value)])
+    if (!active || current !== version) return
+    myId.value = mine.id; peer.value = other; await refresh(true); schedule()
+    const shared = (mine.interests || []).find((tag) => (other.interests || []).some((value) => value.toLowerCase() === tag.toLowerCase()))
+    if (shared) icebreaker.value = '你好，我也对' + shared + '感兴趣，你最近有什么推荐吗？'
+  } catch (e) { error.value = errorText(e) }
+})
+onPageHide(stop); onUnload(stop)
+function stop() { active = false; version++; if (timer) clearTimeout(timer); timer = null; if (restored) uni.setStorageSync(draftKey(), draft.value) }
+function schedule() { if (active && getChatAutoRefresh()) timer = setTimeout(async () => { await refresh(false); schedule() }, 5000) }
+function merge(items) { const map = new Map<number, Message>(); messages.value.forEach((item) => map.set(item.id, item)); items.forEach((item) => map.set(item.id, item)); messages.value = Array.from(map.values()).sort((a, b) => a.id - b.id) }
+async function refresh(scroll) {
+  if (refreshing || !active) return
+  refreshing = true; const current = version
+  try {
+    const items = await api('/chats/' + peerId.value + '/messages')
+    if (!active || current !== version) return
+    const previous = messages.value.length ? messages.value[messages.value.length - 1].id : 0
+    merge(items); if (items.length < 50 && previous === 0) noOlder.value = true
+    if (scroll) await scrollLatest(); else if (items.length && items[items.length - 1].id > previous) hasNew.value = true
+    if (!pendingMedia.value) error.value = ''
+  } catch (e) { if (active) error.value = errorText(e) } finally { refreshing = false }
+}
+async function scrollLatest() {
+  clearSearch(); hasNew.value = false
+  if (!messages.value.length) return
+  lastAnchor.value = ''; setTimeout(() => { if (active && messages.value.length) lastAnchor.value = 'm' + messages.value[messages.value.length - 1].id }, 30)
+  const lastReadId = messages.value.filter((item) => item.receiverId === myId.value).reduce((max, item) => Math.max(max, item.id), 0)
+  if (lastReadId) {
+    try { await api('/chats/' + peerId.value + '/read', 'POST', { lastReadId }) }
+    catch (e) { error.value = '消息已载入，已读状态更新失败，可稍后刷新' }
+  }
+}
+async function loadOlder() {
+  if (loadingOlder.value || noOlder.value || searching.value || !messages.value.length) return
+  loadingOlder.value = true
+  try { const items = await api('/chats/' + peerId.value + '/messages?before=' + messages.value[0].id); merge(items); noOlder.value = items.length < 50; lastAnchor.value = '' } catch (e) { error.value = errorText(e) } finally { loadingOlder.value = false }
+}
+async function searchMessages() {
+  if (!search.value.trim()) { clearSearch(); return }
+  try { searchResults.value = await api('/chats/' + peerId.value + '/messages?q=' + encodeURIComponent(search.value.trim())); searching.value = true; lastAnchor.value = '' } catch (e) { error.value = errorText(e) }
+}
+function clearSearch() { searching.value = false; search.value = '' }
+async function deliver(payload) {
+  const result = await api('/chats/' + peerId.value + '/messages', 'POST', payload)
+  if (active) { merge([result]); await scrollLatest() }
+  return result
+}
+async function send() {
+  const content = draft.value.trim(); if (!content || sending.value) return
+  sending.value = true
+  if (pendingText.content !== content) pendingText = { content, clientId: newId() }
+  try {
+    await deliver({ content, type: 'text', clientId: pendingText.clientId })
+    if (draft.value.trim() === content) draft.value = ''
+    pendingText = { content: '', clientId: '' }
+    if (draft.value) uni.setStorageSync(draftKey(), draft.value); else uni.removeStorageSync(draftKey())
+    error.value = ''
+  } catch (e) { error.value = errorText(e) } finally { sending.value = false }
+}
+function chooseAttachment(type) {
+  if (sending.value) return
+  if (pendingMedia.value) { error.value = '上一份附件还未发出，请先重试发送'; return }
+  sending.value = true
+  uni.chooseImage({ count: 1, sizeType: ['original'], sourceType: ['album'], success: async (result) => {
+    if (!result.tempFilePaths.length) { sending.value = false; return }
+    try {
+      const uploaded = await uploadImage(result.tempFilePaths[0])
+      pendingMedia.value = { type, content: '', imageUrl: uploaded.url, clientId: newId() }
+      await deliver(pendingMedia.value); pendingMedia.value = null; showStickers.value = false; error.value = ''
+    } catch (e) { error.value = errorText(e) } finally { sending.value = false }
+  }, fail: () => { sending.value = false } })
+}
+async function retryMedia() { if (!pendingMedia.value || sending.value) return; sending.value = true; try { await deliver(pendingMedia.value); pendingMedia.value = null; error.value = '' } catch (e) { error.value = errorText(e) } finally { sending.value = false } }
+async function sendSticker(content) { if (sending.value) return; sending.value = true; try { await deliver({ type: 'sticker', content, clientId: newId() }); showStickers.value = false; error.value = '' } catch (e) { error.value = errorText(e) } finally { sending.value = false } }
+function previewMessage(message) { if (message.imageUrl) uni.previewImage({ urls: [mediaUrl(message.imageUrl)] }) }
+function back() { uni.navigateBack({ fail: () => uni.switchTab({ url: '/pages/chat/chat' }) }) }
+async function blockPeer() { if (!await confirmAction('屏蔽此用户？', '屏蔽后双方无法继续聊天，设置页可取消屏蔽。')) return; try { await api('/blocks/' + peerId.value, 'POST'); back() } catch (e) { error.value = errorText(e) } }
+</script>
+<style scoped>
+.conversation { background-color: #f4f6fb; }.thread-frame { flex: 1; width: 100%; max-width: 800px; margin: 0 auto; background-color: #ffffff; }.thread-header { min-height: 74px; flex-direction: row; align-items: center; padding: 0 16px; border-bottom: 1px solid #e9edf4; }.back { font-size: 24px; color: #3c7772; margin-right: 14px; }.peer-avatar { width: 36px; height: 36px; border-radius: 12px; background-color: #d8f0ea; margin-right: 10px; justify-content: center; align-items: center; color: #28776e; }.peer-avatar-image { width: 100%; height: 100%; border-radius: 12px; }.peer-heading { flex: 1; }.peer-name { font-size: 16px; font-weight: 700; color: #20304a; }.block { font-size: 11px; color: #9b6472; margin-left: 10px; }.header-action { font-size: 12px; color: #3d8279; margin-left: 10px; }
+.search-row { flex-direction: row; align-items: center; padding: 10px 16px; }.messages { flex: 1; padding: 10px 18px; box-sizing: border-box; }.history-link { padding: 8px; align-items: center; }.message-row { width: 100%; align-items: flex-start; margin: 10px 0; }.own { align-items: flex-end; }.message-time { font-size: 9px; color: #9caaba; margin-bottom: 4px; }.bubble { max-width: 320px; background-color: #f0f3f8; border-radius: 16px; padding: 11px 14px; }.bubble-copy { font-size: 14px; line-height: 22px; color: #314057; }.ownBubble { background-color: #d9f2e9; }.image-bubble { border-radius: 15px; overflow: hidden; background-color: #eef2f5; }.message-image { width: 210px; height: 180px; }.sticker-bubble { min-width: 74px; min-height: 74px; justify-content: center; align-items: center; }.sticker-emoji { font-size: 53px; line-height: 67px; }.sticker-image { width: 150px; height: 150px; }.error-row { padding: 6px 18px; }.error-copy { font-size: 11px; color: #bd4a59; }.retry { color: #3d8279; font-size: 12px; margin-top: 5px; }.new-hint { align-items: center; padding: 8px; color: #397d73; font-size: 12px; }.sticker-picker { flex-direction: row; flex-wrap: wrap; padding: 9px 16px; border-top: 1px solid #e9edf4; }.sticker-choice { width: 25%; height: 48px; justify-content: center; align-items: center; font-size: 30px; }.sticker-upload { width: 100%; min-height: 38px; border-radius: 11px; background-color: #e9f5f2; justify-content: center; align-items: center; margin-top: 7px; }.sticker-upload-label { color: #327970; font-size: 12px; }
+.starter { padding: 15px; border-radius: 13px; background-color: #e8f4f0; margin-top: 12px; }
+.composer { flex-direction: row; padding: 12px; align-items: center; border-top: 1px solid #e9edf4; padding-bottom: max(12px, env(safe-area-inset-bottom)); }.tool-btn { width: 30px; height: 40px; justify-content: center; align-items: center; margin-right: 3px; }.tool-icon { font-size: 24px; color: #4c7d79; }.message-input { flex: 1; height: 42px; background-color: #f3f5f9; border-radius: 12px; padding: 0 12px; font-size: 13px; }.send-btn { background-color: #263c59; border-radius: 12px; padding: 12px; margin-left: 8px; }.send-label { color: #ffffff; font-size: 12px; }
+</style>
+

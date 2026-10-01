@@ -1,0 +1,112 @@
+<template>
+  <view class="page" :class="{ 'liquid-theme': theme === 'glass' }">
+    <scroll-view direction="vertical" class="scroll">
+      <view class="frame">
+        <view class="back" @click="back"><text class="back-label">← 返回我的</text></view>
+        <text class="eyebrow">PREFERENCES</text>
+        <text class="page-title">设置</text>
+        <text class="muted">按你习惯的方式使用校园社区。</text>
+
+        <view class="surface setting-section">
+          <text class="section-title">屏蔽管理</text>
+          <text v-if="blocked.length === 0" class="muted section-copy">当前没有屏蔽的用户。</text>
+          <view v-for="person in blocked" :key="person.id" class="setting-row block-row"><text>{{ person.displayName }}</text><text class="back-label" @click="unblock(person.id)">取消屏蔽</text></view>
+        </view>
+        <view class="surface setting-section" @click="clearDrafts"><text class="section-title">清除本机草稿</text><text class="muted section-copy">清除当前账号尚未发布的动态与聊天输入草稿</text></view>
+        <view class="surface setting-section">
+          <text class="section-title">外观风格</text>
+          <text class="muted section-copy">切换后立即应用，下次打开仍会保留。</text>
+          <view class="theme-list">
+            <view class="theme-card classic-preview" :class="{ chosen: theme === 'classic' }" @click="chooseTheme('classic')">
+              <view class="preview-window"><view class="preview-line wide"></view><view class="preview-line"></view><view class="preview-button"></view></view>
+              <text class="theme-name">经典风格</text><text class="theme-description">当前的清爽校园界面</text>
+            </view>
+            <view class="theme-card glass-preview" :class="{ chosen: theme === 'glass' }" @click="chooseTheme('glass')">
+              <view class="preview-window glass-window"><view class="preview-line wide"></view><view class="preview-line"></view><view class="preview-button"></view></view>
+              <text class="theme-name">Liquid Glass</text><text class="theme-description">半透明毛玻璃与柔和光泽</text>
+            </view>
+          </view>
+        </view>
+
+        <view class="surface setting-section setting-row">
+          <view class="setting-copy"><text class="section-title">聊天自动刷新</text><text class="muted section-copy">开启后每 5 秒获取一次新消息</text></view>
+          <switch :checked="autoRefresh" color="#55b3a6" @change="changeRefresh" />
+        </view>
+
+        <view class="surface setting-section">
+          <text class="section-title">服务器地址</text>
+          <text class="muted section-copy">更换服务器后，现有登录信息可能需要重新登录。</text>
+          <input class="field" v-model="server" placeholder="http://localhost:8088" />
+          <view class="secondary-btn server-save" @click="saveServer"><text class="secondary-label">保存地址</text></view>
+        </view>
+        <text v-if="feedback" class="feedback">{{ feedback }}</text>
+      </view>
+    </scroll-view>
+  </view>
+</template>
+
+<script setup>
+import { ref } from 'vue'
+import { onPageShow } from '@dcloudio/uni-app'
+import { api, ensureLogin, serverUrl, setServerUrl, errorText, accountKey, confirmAction } from '@/common/api.js'
+import { getTheme, setTheme, getChatAutoRefresh, setChatAutoRefresh } from '@/common/settings.js'
+
+const theme = ref(getTheme())
+const autoRefresh = ref(getChatAutoRefresh())
+const server = ref(serverUrl())
+const feedback = ref('')
+type BlockedUser = { id: number, displayName: string }
+const blocked = ref<BlockedUser[]>([])
+onPageShow(async () => {
+  if (!ensureLogin()) return
+  theme.value = getTheme()
+  autoRefresh.value = getChatAutoRefresh()
+  server.value = serverUrl()
+  try { blocked.value = await api('/blocks') } catch (e) { feedback.value = errorText(e) }
+})
+function back() { uni.navigateBack({ fail: () => uni.switchTab({ url: '/pages/mine/mine' }) }) }
+function chooseTheme(value) { setTheme(value); theme.value = value; feedback.value = '外观已切换' }
+function changeRefresh(event) {
+  autoRefresh.value = event.detail.value
+  setChatAutoRefresh(autoRefresh.value)
+  feedback.value = '聊天刷新设置已保存'
+}
+function saveServer() {
+  try { const changed = setServerUrl(server.value); feedback.value = '服务器地址已保存'; if (changed) uni.reLaunch({ url: '/pages/auth/auth' }) }
+  catch (e) { feedback.value = errorText(e) }
+}
+async function unblock(id) {
+  try { await api('/blocks/' + id, 'DELETE'); blocked.value = await api('/blocks'); feedback.value = '已取消屏蔽' } catch (e) { feedback.value = errorText(e) }
+}
+async function clearDrafts() {
+  if (!await confirmAction('清除草稿？', '当前账号保存在本机的未发布动态与聊天输入草稿将被移除。')) return
+  const key = accountKey()
+  uni.getStorageInfoSync().keys.forEach((name) => { if (name === 'pulse_draft:' + key || name.startsWith('pulse_chat_draft:' + key + ':')) uni.removeStorageSync(name) })
+  feedback.value = '本机草稿已清除'
+}
+</script>
+
+<style scoped>
+.scroll { flex: 1; }
+.back { margin-bottom: 25px; }
+.back-label { color: #397e76; font-size: 13px; }
+.setting-section { margin-top: 18px; }
+.section-copy { margin-top: 6px; }
+.theme-list { flex-direction: row; margin-top: 17px; }
+.theme-card { flex: 1; min-width: 0; padding: 11px; border-radius: 17px; border-width: 2px; border-style: solid; border-color: transparent; margin-right: 8px; }
+.classic-preview { background-color: #e8edf4; }
+.glass-preview { background-color: #bedce9; background-image: linear-gradient(135deg, #c9d4fa, #9de1d6 58%, #e9ccef); }
+.chosen { border-color: #479c91; }
+.preview-window { height: 77px; border-radius: 12px; padding: 13px; background-color: #ffffff; }
+.glass-window { background-color: rgba(255, 255, 255, .57); border-width: 1px; border-style: solid; border-color: rgba(255, 255, 255, .8); backdrop-filter: blur(18px); }
+.preview-line { height: 6px; width: 48%; border-radius: 9px; background-color: #b5c7d2; margin-bottom: 8px; }
+.wide { width: 75%; }
+.preview-button { height: 14px; width: 43%; border-radius: 9px; background-color: #70c7b8; margin-top: 11px; }
+.theme-name { color: #24344c; font-size: 13px; font-weight: 700; margin-top: 11px; }
+.theme-description { color: #68798b; font-size: 10px; line-height: 16px; margin-top: 3px; }
+.setting-row { flex-direction: row; align-items: center; justify-content: space-between; }
+.setting-copy { flex: 1; }
+.block-row { margin-top: 15px; color: #445771; font-size: 13px; }
+.server-save { align-self: flex-start; margin-top: 13px; }
+.feedback { color: #327970; font-size: 12px; margin: 16px 2px; }
+</style>

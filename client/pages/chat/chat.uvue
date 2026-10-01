@@ -1,0 +1,84 @@
+<template>
+  <view class="page" :class="{ 'liquid-theme': theme === 'glass' }">
+    <scroll-view direction="vertical" class="scroll">
+      <view class="frame">
+        <text class="eyebrow">CONVERSATIONS</text>
+        <text class="page-title">消息</text>
+        <text class="muted">从共同话题开始，慢慢认识彼此。</text>
+        <input class="field" v-model="query" maxlength="80" placeholder="搜索同学或最近的文字消息" />
+        <view class="filter-row"><text class="text-link" @click="unreadOnly = !unreadOnly">{{ unreadOnly ? '显示全部会话' : '只看未读' }}</text><text class="text-link" @click="load">刷新消息</text></view>
+        <view v-if="loading" class="surface empty"><text class="empty-label">正在加载消息…</text></view>
+        <view v-else-if="chats.length === 0" class="surface empty"><text class="empty-label">还没有对话。去共鸣页找到感兴趣的同学，发出第一句问候吧。</text></view>
+        <view v-else-if="filteredChats.length === 0" class="surface empty"><text class="empty-label">{{ unreadOnly ? '当前没有匹配的未读会话。' : '没有匹配的会话，换个关键词试试。' }}</text></view>
+        <view class="surface chat-row" v-for="chat in filteredChats" :key="chat.peer.id" @click="open(chat.peer.id)">
+          <view class="avatar"><image v-if="chat.peer.avatarUrl" class="avatar-image" :src="mediaUrl(chat.peer.avatarUrl)" mode="aspectFill" /><text v-else class="avatar-letter">{{ chat.peer.displayName.slice(0, 1) }}</text></view>
+          <view class="chat-info">
+            <text class="name">{{ chat.peer.displayName }}</text>
+            <text class="muted snippet">{{ chat.lastMessage.type === 'image' ? '[图片]' : chat.lastMessage.type === 'sticker' ? '[表情包] ' + chat.lastMessage.content : chat.lastMessage.content }}</text>
+          </view>
+          <view class="chat-meta"><text class="time-label">{{ chat.lastMessage.createdAt.replace('T', ' ').slice(5, 16) }}</text><text v-if="chat.unreadCount" class="unread-badge">{{ chat.unreadCount > 99 ? '99+' : chat.unreadCount }}</text></view>
+        </view>
+        <view v-if="error" class="surface"><text class="error">{{ error }}</text></view>
+      </view>
+    </scroll-view>
+    <CustomTabBar />
+  </view>
+</template>
+
+<script setup>
+import { ref, computed } from 'vue'
+import { onPageShow, onPageHide, onUnload } from '@dcloudio/uni-app'
+import CustomTabBar from '@/components/CustomTabBar.uvue'
+import { api, ensureLogin, mediaUrl, errorText } from '@/common/api.js'
+import { getTheme, getChatAutoRefresh } from '@/common/settings.js'
+type Peer = { id: number, displayName: string, avatarUrl: string }
+type LatestMessage = { type: string, content: string, createdAt: string }
+type Conversation = { peer: Peer, lastMessage: LatestMessage, unreadCount: number }
+const chats = ref<Conversation[]>([])
+const theme = ref(getTheme())
+const loading = ref(false)
+const error = ref('')
+const query = ref('')
+const unreadOnly = ref(false)
+const filteredChats = computed(() => chats.value.filter((chat) => (!unreadOnly.value || chat.unreadCount > 0) && (chat.peer.displayName + ' ' + chat.lastMessage.content).toLowerCase().includes(query.value.trim().toLowerCase())))
+let timer: number | null = null
+let active = false
+onPageShow(async () => {
+  stop(); active = true
+  theme.value = getTheme()
+  uni.hideTabBar()
+  if (!ensureLogin()) return
+  await load()
+  schedule()
+})
+onPageHide(stop)
+onUnload(stop)
+function stop() { active = false; if (timer) clearTimeout(timer); timer = null }
+function schedule() { if (active && getChatAutoRefresh()) timer = setTimeout(async () => { await load(); schedule() }, 5000) }
+async function load() {
+  if (loading.value) return
+  loading.value = true
+  try { chats.value = await api('/chats'); error.value = '' }
+  catch (e) { error.value = errorText(e) }
+  finally { loading.value = false }
+}
+function open(id) { uni.navigateTo({ url: '/pages/conversation/conversation?id=' + id }) }
+</script>
+
+<style scoped>
+.scroll { flex: 1; }
+.filter-row { flex-direction: row; justify-content: space-between; margin-top: 13px; }
+.text-link { color: #397b73; font-size: 12px; }
+.chat-meta { align-items: flex-end; margin-left: 10px; }
+.time-label { color: #8a9aaa; font-size: 10px; }
+.unread-badge { background-color: #4ca99b; color: #ffffff; border-radius: 12px; font-size: 10px; padding: 3px 7px; margin-top: 8px; }
+.chat-row { flex-direction: row; align-items: center; margin-top: 12px; }
+.avatar { width: 48px; height: 48px; border-radius: 16px; background-color: #e4f3f0; justify-content: center; align-items: center; margin-right: 14px; }
+.avatar-image { width: 100%; height: 100%; border-radius: 16px; }
+.avatar-letter { color: #287870; font-size: 19px; font-weight: 700; }
+.chat-info { flex: 1; }
+.name { font-size: 15px; color: #1e304b; font-weight: 700; }
+.snippet { margin-top: 5px; }
+.chevron { font-size: 26px; color: #9aacc0; }
+.error { color: #bd4a59; font-size: 13px; }
+</style>

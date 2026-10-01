@@ -1,0 +1,154 @@
+<template>
+  <view class="page" :class="{ 'liquid-theme': theme === 'glass' }">
+    <scroll-view direction="vertical" class="scroll">
+      <view class="frame">
+        <text class="text-link" @click="back">← 返回地图 / 社区</text>
+        <text class="eyebrow">CAMPUS MOMENT</text><text class="page-title">位置动态</text>
+        <text v-if="loading" class="muted">正在加载动态…</text>
+        <text v-if="error" class="text-link" @click="load">点击重新加载</text>
+        <view class="surface post" v-for="post in posts" :key="post.id">
+          <view class="author-row">
+            <view class="avatar"><image v-if="post.authorAvatarUrl" class="avatar-image" :src="mediaUrl(post.authorAvatarUrl)" mode="aspectFill" /><text v-else class="avatar-letter">{{ post.authorName.slice(0, 1) }}</text></view>
+            <view><text class="author-name">{{ post.authorName }}</text><text class="muted">{{ post.createdAt.replace('T', ' ').slice(0, 16) }}</text></view>
+          </view>
+          <text v-if="post.content" class="content">{{ post.content }}</text>
+          <text v-if="post.topics" class="post-meta">#{{ post.topics.replace(/,/g, ' #') }}</text>
+          <text v-if="post.locationName" class="muted post-meta">⌖ {{ post.locationName }}</text>
+          <text v-if="post.latitude != null && post.longitude != null" class="post-meta" @click="openMap(post)">查看地图标记 →</text>
+          <view v-if="post.imageUrls && post.imageUrls.length" class="post-image-grid">
+            <image v-for="(image, index) in post.imageUrls" :key="image" class="post-image"
+              :src="mediaUrl(image)" mode="aspectFill" @click="previewPostImages(post, index)" />
+          </view>
+          <view class="post-actions">
+            <view @click="likePost(post)"><text class="comment-toggle-label">{{ post.liked ? '♥' : '♡' }} {{ post.likeCount || 0 }}</text></view>
+            <view @click="sharePost(post)"><text class="comment-toggle-label">复制分享</text></view>
+            <view v-if="post.authorId === ownId" @click="deletePost(post)"><text class="comment-toggle-label">删除</text></view>
+            <view class="comment-toggle" @click="toggleComments(post)">
+              <text class="comment-toggle-label">评论 {{ post.commentCount || 0 }} {{ openCommentPost === post.id ? '⌃' : '⌄' }}</text>
+            </view>
+          </view>
+          <view v-if="openCommentPost === post.id" class="comments-panel">
+            <view v-if="comments.length === 0" class="no-comments">
+              <text class="muted">{{ loadingComments ? '正在加载评论…' : '还没有评论，来聊聊吧。' }}</text>
+            </view>
+            <view v-for="comment in comments" :key="comment.id" class="comment-row">
+              <text class="comment-author">{{ comment.authorName }}</text>
+              <text class="comment-content">{{ comment.content }}</text>
+            </view>
+            <view class="comment-compose">
+              <input class="comment-input" v-model="commentDraft" maxlength="500" placeholder="写下你的评论…" @confirm="sendComment(post.id)" />
+              <view class="comment-send" @click="sendComment(post.id)"><text class="comment-send-label">{{ sendingComment ? '发送中' : '发送' }}</text></view>
+            </view>
+          </view>
+        </view>
+        <view v-if="error" class="surface"><text class="error">{{ error }}</text></view>
+      </view>
+    </scroll-view>
+  </view>
+</template>
+
+<script setup>
+import { ref } from 'vue'
+import { onLoad, onPageShow, onUnload } from '@dcloudio/uni-app'
+import { api, ensureLogin, mediaUrl, errorText, confirmAction } from '@/common/api.js'
+import { getTheme } from '@/common/settings.js'
+
+type Post = { id: number, authorId: number, authorName: string, authorAvatarUrl: string, content: string, topics: string, locationName: string, createdAt: string, imageUrls: string[], likeCount: number, liked: boolean, commentCount: number, latitude: number | null, longitude: number | null }
+type Comment = { id: number, authorName: string, content: string }
+const posts = ref<Post[]>([])
+const theme = ref(getTheme())
+const loading = ref(false)
+const error = ref('')
+const openCommentPost = ref(0)
+const comments = ref<Comment[]>([])
+const commentDraft = ref('')
+const loadingComments = ref(false)
+const sendingComment = ref(false)
+let postId = 0
+onLoad((options) => { postId = Number(options.id) })
+onUnload(() => { loadVersion++ })
+function back() { uni.navigateBack({ fail: () => uni.switchTab({ url: '/pages/circle/circle' }) }) }
+const ownId = ref(0)
+const likingPost = ref(0)
+let loadVersion = 0
+onPageShow(async () => {
+  theme.value = getTheme()
+  if (!ensureLogin()) return
+  await load()
+})
+async function load() {
+  const version = ++loadVersion
+  loading.value = true
+  try {
+    if (!Number.isSafeInteger(postId) || postId <= 0) throw new Error('动态编号无效')
+    const [post, me] = await Promise.all([api('/posts/' + postId), api('/me')])
+    if (version !== loadVersion) return
+    posts.value = [post]; ownId.value = me.id; openCommentPost.value = 0; error.value = ''; await toggleComments(post)
+  } catch (e) { error.value = errorText(e) }
+  finally { if (version === loadVersion) loading.value = false }
+}
+function openMap(post) { uni.navigateTo({ url: '/pages/map/map?post=' + post.id }) }
+async function likePost(post) {
+  if (likingPost.value) return
+  likingPost.value = post.id
+  try { Object.assign(post, await api('/posts/' + post.id + '/like', post.liked ? 'DELETE' : 'PUT')) }
+  catch (e) { error.value = errorText(e) }
+  finally { likingPost.value = 0 }
+}
+function sharePost(post) { uni.setClipboardData({ data: post.authorName + '的校园动态：\n' + (post.content || '图片动态') + '\n' + (post.topics ? '#' + post.topics.replace(/,/g, ' #') : '') + (post.locationName ? '\n地点：' + post.locationName : '') }) }
+async function deletePost(post) {
+  if (!await confirmAction('删除这条动态？', '删除后图片关联、评论与点赞也会移除。')) return
+  try { await api('/posts/' + post.id, 'DELETE'); back() } catch (e) { error.value = errorText(e) }
+}
+function previewPostImages(post, index) {
+  uni.previewImage({ urls: post.imageUrls.map((image) => mediaUrl(image)), current: index })
+}
+async function toggleComments(post) {
+  if (openCommentPost.value === post.id) { openCommentPost.value = 0; return }
+  openCommentPost.value = post.id
+  comments.value = []; commentDraft.value = ''; loadingComments.value = true
+  try { const result = await api('/posts/' + post.id + '/comments'); if (openCommentPost.value === post.id) comments.value = result }
+  catch (e) { error.value = errorText(e) }
+  finally { if (openCommentPost.value === post.id) loadingComments.value = false }
+}
+async function sendComment(postId) {
+  const content = commentDraft.value.trim()
+  if (!content || sendingComment.value) return
+  sendingComment.value = true
+  try {
+    const comment = await api('/posts/' + postId + '/comments', 'POST', { content })
+    if (openCommentPost.value === postId) { comments.value.push(comment); commentDraft.value = '' }
+    const post = posts.value.find((item) => item.id === postId)
+    if (post) post.commentCount = (post.commentCount || 0) + 1
+  } catch (e) { error.value = errorText(e) }
+  finally { sendingComment.value = false }
+}
+</script>
+
+<style scoped>
+.scroll { flex: 1; }
+.text-link { color: #397b73; font-size: 12px; }
+.post-meta { font-size: 12px; color: #50827b; margin-top: 8px; }
+.post { margin-top: 12px; }
+.author-row { flex-direction: row; align-items: center; }
+.avatar { width: 38px; height: 38px; border-radius: 13px; background-color: #e5ecf8; justify-content: center; align-items: center; margin-right: 10px; }
+.avatar-image { width: 100%; height: 100%; border-radius: 13px; }
+.avatar-letter { color: #426188; font-size: 16px; font-weight: 700; }
+.author-name { font-size: 13px; color: #22314d; font-weight: 700; }
+.content { color: #344359; font-size: 15px; line-height: 25px; margin-top: 16px; }
+.post-image-grid { flex-direction: row; flex-wrap: wrap; margin-top: 12px; }
+.post-image { width: 31%; height: 100px; margin-right: 2%; margin-bottom: 6px; border-radius: 8px; background-color: #edf0f4; }
+.post-actions { flex-direction: row; justify-content: space-between; align-items: center; border-top: 1px solid #eef1f4; margin-top: 10px; padding-top: 9px; }
+.comment-toggle { padding: 3px 2px; }
+.comment-toggle-label { color: #537a78; font-size: 12px; }
+.comments-panel { border-top: 1px solid #eef1f4; padding-top: 9px; }
+.no-comments { padding: 6px 0; }
+.comment-row { flex-direction: row; flex-wrap: wrap; padding: 5px 0; }
+.comment-author { color: #42766f; font-size: 12px; font-weight: 700; margin-right: 7px; }
+.comment-content { color: #46566b; font-size: 12px; line-height: 19px; flex: 1; }
+.comment-compose { flex-direction: row; align-items: center; margin-top: 8px; }
+.comment-input { flex: 1; height: 38px; padding: 0 11px; border-radius: 11px; background-color: #f3f5f8; font-size: 12px; }
+.comment-send { padding: 10px 13px; margin-left: 7px; border-radius: 10px; background-color: #dff0ea; }
+.comment-send-label { font-size: 12px; color: #34736d; font-weight: 700; }
+.error { color: #bd4a59; font-size: 13px; }
+</style>
